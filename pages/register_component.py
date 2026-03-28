@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from utils.auth import require_auth
 from utils.google_client import get_gspread_client
-from utils.sheet_handler import get_next_component_id, add_component_rows
+from utils.sheet_handler import get_next_component_id, add_component_rows, fetch_stock_data, add_stock_entry
 
 
 user = require_auth()
@@ -90,6 +90,26 @@ if submitted:
     try:
         add_component_rows(client, [row])
         st.success(f"Component registered! ID: **{next_id}** — {mpn.strip()} for {pcb_name.strip()}")
+
+        # Auto-add MPN to Stock tab if not already there
+        try:
+            stock_data = fetch_stock_data(client)
+            existing_mpns = set()
+            for s in stock_data:
+                stock_mpn = str(s.get("Component MPN", "") or s.get(list(s.keys())[0] if s else "", "")).strip()
+                if stock_mpn:
+                    existing_mpns.add(stock_mpn.upper())
+
+            mpn_clean = mpn.strip()
+            if mpn_clean.upper() not in existing_mpns:
+                add_stock_entry(client, mpn_clean, specs=component.strip(),
+                                project=pcb_name.strip(), note=f"Auto-added by {user['name']}")
+                st.info(f"MPN `{mpn_clean}` was not in Stock tab — auto-added!")
+            else:
+                st.caption(f"MPN `{mpn_clean}` already exists in Stock tab.")
+        except Exception as e:
+            st.warning(f"Component registered but Stock check failed: {e}")
+
         st.balloons()
     except Exception as e:
         st.error(f"Failed to register: {e}")
