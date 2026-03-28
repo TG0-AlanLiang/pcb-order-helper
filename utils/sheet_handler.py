@@ -130,3 +130,36 @@ def add_delivery_row(client: gspread.Client, row: list):
     sheet = get_spreadsheet(client)
     ws = sheet.worksheet(TAB_PCB_DELIVERY)
     ws.insert_row(row, index=2, value_input_option="USER_ENTERED")
+
+
+def update_delivery_cell(client: gspread.Client, delivery_number: int,
+                         column_name: str, value: str):
+    """Update a specific cell in PCB Delivery by delivery Number and column name.
+
+    Args:
+        client: authenticated gspread client
+        delivery_number: the Number value in column A
+        column_name: key from PCB_DELIVERY_COLS (e.g. "Jimmy Received")
+        value: the new cell value
+    """
+    from config import PCB_DELIVERY_COLS
+
+    col_letter = PCB_DELIVERY_COLS.get(column_name)
+    if not col_letter:
+        raise ValueError(f"Unknown column: {column_name}")
+    col_idx = ord(col_letter.upper()) - ord("A") + 1  # 1-indexed
+
+    sheet = get_spreadsheet(client)
+    ws = sheet.worksheet(TAB_PCB_DELIVERY)
+    all_values = ws.get_all_values()
+
+    # Find the row with matching Number (column A)
+    for row_idx, row in enumerate(all_values[1:], start=2):  # skip header
+        try:
+            if int(row[0]) == delivery_number:
+                ws.update_cell(row_idx, col_idx, value)
+                return
+        except (ValueError, IndexError):
+            continue
+
+    raise ValueError(f"Delivery number {delivery_number} not found")

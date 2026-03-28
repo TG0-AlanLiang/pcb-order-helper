@@ -8,7 +8,7 @@ import streamlit as st
 
 st.set_page_config(page_title="PCB Order Helper", page_icon="📊", layout="wide")
 
-from utils.auth import get_current_user, is_admin, _prompt_email_login
+from utils.auth import get_current_user, is_admin, is_logistics, _prompt_email_login
 
 # --- Auth gate ---
 user = get_current_user()
@@ -43,6 +43,8 @@ translator_page = [
 
 admin_pages = []
 status_pages = []
+logistics_pages = []
+
 if is_admin(user):
     admin_pages = [
         st.Page("pages/admin_all_orders.py", title="All Orders", icon="📊", default=True),
@@ -55,12 +57,23 @@ if is_admin(user):
         st.Page("pages/5_Status.py", title="Status", icon="⚙️"),
     ]
 
+if is_logistics(user):
+    logistics_pages = [
+        st.Page("pages/logistics_dashboard.py", title="Logistics", icon="📦", default=True),
+    ]
+
 # Navigation structure
 if is_admin(user):
     pages = {
         "Admin": admin_pages,
         "Orders": shared_pages,
         "Tools": translator_page + status_pages,
+    }
+elif is_logistics(user):
+    pages = {
+        "Logistics": logistics_pages,
+        "Orders": shared_pages,
+        "Tools": translator_page,
     }
 else:
     pages = {
@@ -73,7 +86,7 @@ pg = st.navigation(pages)
 # Show user info in sidebar
 with st.sidebar:
     st.markdown("---")
-    role_badge = "🔑 Admin" if is_admin(user) else "👤 Engineer"
+    role_badge = "🔑 Admin" if is_admin(user) else "📦 Logistics" if is_logistics(user) else "👤 Engineer"
     st.markdown(f"{role_badge} **{user['name']}**")
     st.caption(user["email"])
     if st.button("Logout", type="secondary", use_container_width=True):

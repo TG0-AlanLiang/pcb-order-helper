@@ -58,17 +58,17 @@ ALL_COMPONENTS_COLS = {
     "Notes": "T",
 }
 
-# Column mappings for PCB Delivery
+# Column mappings for PCB Delivery (must match actual Sheet headers)
 PCB_DELIVERY_COLS = {
     "Number": "A",
-    "Order Date": "B",
-    "Priority": "C",
+    "Order date": "B",
+    "Piority": "C",
     "PCB Name": "D",
-    "Vendor Order Number": "E",
+    "vendor Order number": "E",
     "Photo": "F",
     "Recipient": "G",
-    "Jimmy Received": "H",
-    "Jimmy Ship Remark": "I",
+    "Jimmy received check": "H",
+    "Jimmy Shipp out remark": "I",
     "ETA (UK)": "J",
 }
 
@@ -96,10 +96,11 @@ ORDERS_HEADERS = [
 ALLOWED_USERS = {
     # Admins
     "alan@tg0.com.hk":     {"name": "Alan",    "role": "admin"},
-    "jimmy@tangi0.com":    {"name": "Jimmy",   "role": "admin"},
-    "jimmy@tg0.co.uk":     {"name": "Jimmy",   "role": "admin"},
     "shaoze@tg0.co.uk":    {"name": "Shaoze",  "role": "admin"},
     "shaoze@tangi0.com":   {"name": "Shaoze",  "role": "admin"},
+    # Logistics (Jimmy)
+    "jimmy@tangi0.com":    {"name": "Jimmy",   "role": "logistics"},
+    "jimmy@tg0.co.uk":     {"name": "Jimmy",   "role": "logistics"},
     # Engineers
     "berk@tg0.co.uk":      {"name": "Berk",    "role": "engineer"},
     "berk@tangi0.com":     {"name": "Berk",    "role": "engineer"},

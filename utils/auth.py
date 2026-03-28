@@ -121,3 +121,8 @@ def require_role(role: str) -> dict:
 def is_admin(user: dict) -> bool:
     """Check if user has admin role."""
     return user.get("role") == "admin"
+
+
+def is_logistics(user: dict) -> bool:
+    """Check if user has logistics role."""
+    return user.get("role") == "logistics"
