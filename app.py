@@ -8,19 +8,25 @@ import streamlit as st
 
 st.set_page_config(page_title="PCB Order Helper", page_icon="📊", layout="wide")
 
-from utils.auth import get_current_user, is_admin
+from utils.auth import get_current_user, is_admin, _prompt_email_login
 
 # --- Auth gate ---
 user = get_current_user()
 
 if user is None:
-    # Even when auth fails, use st.navigation to prevent auto-discovery sidebar
-    denied_page = st.Page("pages/ee_submit_order.py", title="Submit Order", icon="📋")
-    pg = st.navigation([denied_page], position="hidden")
-    st.error("🔒 Access Denied")
-    st.markdown("Your Google account is not authorized to use this app.")
-    st.markdown("Contact **Alan** (alan@tg0.com.hk) to request access.")
-    st.stop()
+    # Show login selector - use hidden navigation to prevent auto-discovery
+    login_page = st.Page(lambda: None, title="Login", icon="🔒")
+    pg = st.navigation([login_page], position="hidden")
+
+    st.title("📊 PCB Order Helper")
+    _prompt_email_login()
+
+    # Re-check after selection
+    user = get_current_user()
+    if user is None:
+        st.stop()
+    else:
+        st.rerun()
 
 # Store user in session state
 st.session_state["user"] = user
@@ -70,5 +76,9 @@ with st.sidebar:
     role_badge = "🔑 Admin" if is_admin(user) else "👤 Engineer"
     st.markdown(f"{role_badge} **{user['name']}**")
     st.caption(user["email"])
+    if st.button("Logout", type="secondary", use_container_width=True):
+        del st.session_state["auth_email"]
+        del st.session_state["user"]
+        st.rerun()
 
 pg.run()
