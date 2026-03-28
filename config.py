@@ -2,9 +2,11 @@
 import os
 
 # --- Environment detection ---
-# Auto-detect: if PCB_LOCAL_DEV is set, use that; otherwise check for Streamlit Cloud
-# Streamlit Cloud sets HOME=/home/appuser, local Windows has USERPROFILE
-IS_LOCAL = os.environ.get("PCB_LOCAL_DEV", "0" if os.environ.get("HOME") == "/home/appuser" else "1") == "1"
+# PCB_LOCAL_DEV=1 → local mode (auto-login as admin)
+# PCB_LOCAL_DEV=0 or not set on Linux → cloud mode (require Google OAuth)
+# Windows always defaults to local mode unless explicitly set to 0
+_is_windows = os.name == "nt"
+IS_LOCAL = os.environ.get("PCB_LOCAL_DEV", "1" if _is_windows else "0") == "1"
 
 # --- Google Sheets configuration ---
 GOOGLE_SHEET_ID = os.environ.get("PCB_SHEET_ID", "1_RGsAnpA7kBrszeORo3LfTWh7QSM1-WbZF-XySe6s2I")
