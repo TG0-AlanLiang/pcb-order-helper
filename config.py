@@ -2,7 +2,9 @@
 import os
 
 # --- Environment detection ---
-IS_LOCAL = os.environ.get("PCB_LOCAL_DEV", "1") == "1"  # Default to local for now
+# Auto-detect: if PCB_LOCAL_DEV is set, use that; otherwise check for Streamlit Cloud
+# Streamlit Cloud sets HOME=/home/appuser, local Windows has USERPROFILE
+IS_LOCAL = os.environ.get("PCB_LOCAL_DEV", "0" if os.environ.get("HOME") == "/home/appuser" else "1") == "1"
 
 # --- Google Sheets configuration ---
 GOOGLE_SHEET_ID = os.environ.get("PCB_SHEET_ID", "1_RGsAnpA7kBrszeORo3LfTWh7QSM1-WbZF-XySe6s2I")
