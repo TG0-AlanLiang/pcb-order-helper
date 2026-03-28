@@ -33,43 +33,51 @@ EN_TO_CN = {
 CN_TO_EN = {v.lower(): k for k, v in EN_TO_CN.items()}
 
 
-def _get_translate_client():
-    """Get Google Cloud Translation client using existing service account."""
-    try:
-        from utils.google_client import _load_credentials
-        creds = _load_credentials()
-        if creds is None:
-            return None
-        from googleapiclient.discovery import build
-        return build("translate", "v2", credentials=creds)
-    except Exception:
-        return None
-
-
 def google_translate(text: str, target_lang: str, source_lang: str = "") -> str:
-    """Translate text using Google Cloud Translation API.
+    """Translate text using deep-translator (free, no API key needed).
 
     Args:
         text: text to translate
-        target_lang: "zh" for Chinese, "en" for English
-        source_lang: source language code, or "" for auto-detect
+        target_lang: "zh-CN" or "zh" for Chinese, "en" for English
+        source_lang: source language code, or "auto" for auto-detect
 
     Returns:
         Translated text, or original text if translation fails
     """
-    client = _get_translate_client()
-    if client is None:
-        return f"[Translation API unavailable] {text}"
+    # Normalize language codes
+    if target_lang in ("zh", "zh-CN", "chinese"):
+        target_lang = "zh-CN"
+    if source_lang in ("zh", "zh-CN", "chinese"):
+        source_lang = "zh-CN"
+    if not source_lang:
+        source_lang = "auto"
 
     try:
-        body = {"q": text, "target": target_lang, "format": "text"}
-        if source_lang:
-            body["source"] = source_lang
-        result = client.translations().list(**body).execute()
-        translations = result.get("translations", [])
-        if translations:
-            return translations[0].get("translatedText", text)
-        return text
+        from deep_translator import GoogleTranslator
+        translator = GoogleTranslator(source=source_lang, target=target_lang)
+        # deep-translator has a 5000 char limit per call, split if needed
+        if len(text) <= 4500:
+            return translator.translate(text)
+        else:
+            # Split by lines and translate in chunks
+            lines = text.split("\n")
+            chunks = []
+            current = []
+            current_len = 0
+            for line in lines:
+                if current_len + len(line) > 4000 and current:
+                    chunks.append("\n".join(current))
+                    current = [line]
+                    current_len = len(line)
+                else:
+                    current.append(line)
+                    current_len += len(line)
+            if current:
+                chunks.append("\n".join(current))
+            results = [translator.translate(chunk) for chunk in chunks]
+            return "\n".join(results)
+    except ImportError:
+        return f"[deep-translator not installed] {text}"
     except Exception as e:
         return f"[Translation error: {e}] {text}"
 
