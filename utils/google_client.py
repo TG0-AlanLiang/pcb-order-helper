@@ -28,11 +28,17 @@ def _load_credentials() -> Optional[Credentials]:
     # Try Streamlit secrets (for Cloud deployment)
     try:
         import streamlit as st
-        sa_info = st.secrets.get("gcp_service_account")
-        if sa_info:
-            return Credentials.from_service_account_info(dict(sa_info), scopes=SCOPES)
-    except Exception:
-        pass
+        if "gcp_service_account" in st.secrets:
+            sa_info = st.secrets["gcp_service_account"]
+            # Convert AttrDict to regular dict and ensure proper types
+            sa_dict = dict(sa_info)
+            # private_key may have literal \n that need to be actual newlines
+            if "private_key" in sa_dict:
+                sa_dict["private_key"] = sa_dict["private_key"].replace("\\n", "\n")
+            return Credentials.from_service_account_info(sa_dict, scopes=SCOPES)
+    except Exception as e:
+        import streamlit as st
+        st.error(f"Failed to load credentials from secrets: {e}")
 
     return None
 
