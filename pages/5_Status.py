@@ -51,7 +51,7 @@ if st.button("Test Google Drive Connection"):
         from utils.google_client import get_drive_service
         service = get_drive_service()
         if service:
-            folder = service.files().get(fileId=DRIVE_FOLDER_ID, fields="name").execute()
+            folder = service.files().get(fileId=DRIVE_FOLDER_ID, fields="name", supportsAllDrives=True).execute()
             st.success(f"Connected to Drive folder: **{folder.get('name')}**")
         else:
             st.error("Failed to create Drive service")
