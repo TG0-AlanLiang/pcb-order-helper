@@ -11,6 +11,18 @@ from utils.sheet_handler import fetch_pcb_delivery, update_delivery_cell
 from utils.orders_store import fetch_all_orders
 
 
+def _get(d: dict, key: str, default: str = "") -> str:
+    """Get value from dict, trying exact key first then stripped key match."""
+    val = d.get(key, None)
+    if val is not None:
+        return str(val).strip()
+    # Try matching with stripped keys (handles trailing spaces in Sheet headers)
+    for k, v in d.items():
+        if k.strip() == key.strip():
+            return str(v).strip()
+    return default
+
+
 user = require_auth()
 
 st.title("📦 Logistics Dashboard")
@@ -28,15 +40,16 @@ if not deliveries:
     st.info("No delivery records found.")
     st.stop()
 
-# --- Summary metrics ---
-pending_receipt = [d for d in deliveries if not d.get("Jimmy received check", "").strip()]
+# --- Categorize ---
+pending_receipt = [d for d in deliveries if not _get(d, "Jimmy received check")]
 ready_to_ship = [d for d in deliveries
-                 if d.get("Jimmy received check", "").strip()
-                 and not d.get("Jimmy Shipp out remark", "").strip()]
+                 if _get(d, "Jimmy received check")
+                 and not _get(d, "Jimmy Shipp out remark")]
 shipped = [d for d in deliveries
-           if d.get("Jimmy received check", "").strip()
-           and d.get("Jimmy Shipp out remark", "").strip()]
+           if _get(d, "Jimmy received check")
+           and _get(d, "Jimmy Shipp out remark")]
 
+# --- Summary metrics ---
 col1, col2, col3 = st.columns(3)
 col1.metric("Pending Receipt", len(pending_receipt))
 col2.metric("Ready to Ship", len(ready_to_ship))
@@ -52,13 +65,13 @@ st.header("📥 Pending Receipt")
 if not pending_receipt:
     st.success("All items received!")
 else:
-    for d in pending_receipt[:20]:  # Limit to recent 20
-        num = d.get("Number", "?")
-        pcb = d.get("PCB Name", "Unknown")
-        vendor = d.get("vendor Order number", "")
-        priority = d.get("Piority", "Normal")
-        order_date = d.get("Order date", "")
-        recipient = d.get("Recipient", "")
+    for i, d in enumerate(pending_receipt[:20]):
+        num = _get(d, "Number", "?")
+        pcb = _get(d, "PCB Name", "N/A")
+        vendor = _get(d, "vendor Order number")
+        priority = _get(d, "Piority", "Normal")
+        order_date = _get(d, "Order date")
+        recipient = _get(d, "Recipient")
 
         priority_icon = "🔴" if priority == "URGENT" else "🟢"
 
@@ -71,10 +84,10 @@ else:
             with c2:
                 st.caption(f"Ordered: {order_date} | To: {recipient}")
             with c3:
-                if st.button("✅ Mark Received", key=f"recv_{num}"):
+                if st.button("✅ Mark Received", key=f"recv_{num}_{i}"):
                     try:
                         today = datetime.now().strftime("%Y-%m-%d")
-                        update_delivery_cell(client, int(num), "Jimmy Received", today)
+                        update_delivery_cell(client, int(num), "Jimmy received check", today)
                         st.success(f"#{num} marked received!")
                         st.rerun()
                     except Exception as e:
@@ -89,26 +102,26 @@ st.header("📤 Ready to Ship")
 if not ready_to_ship:
     st.success("Nothing waiting to ship!")
 else:
-    for d in ready_to_ship:
-        num = d.get("Number", "?")
-        pcb = d.get("PCB Name", "Unknown")
-        received = d.get("Jimmy received check", "")
-        recipient = d.get("Recipient", "")
-        priority = d.get("Piority", "Normal")
+    for i, d in enumerate(ready_to_ship):
+        num = _get(d, "Number", "?")
+        pcb = _get(d, "PCB Name", "N/A")
+        received = _get(d, "Jimmy received check")
+        recipient = _get(d, "Recipient")
+        priority = _get(d, "Piority", "Normal")
 
         priority_icon = "🔴" if priority == "URGENT" else "🟢"
 
         with st.expander(f"{priority_icon} **#{num}** — {pcb} | Received: {received} | To: {recipient}", expanded=True):
             remark = st.text_area(
                 "Shipping remark (tracking number, destination, notes)",
-                key=f"ship_{num}",
+                key=f"logship_remark_{num}_{i}",
                 placeholder="e.g. SF1562763341561\n5 to 杭州临平区乔司街道天\nThe rest to UK Shaoze",
                 height=100,
             )
-            if st.button("📦 Mark Shipped", key=f"ship_btn_{num}", type="primary"):
+            if st.button("📦 Mark Shipped", key=f"logship_btn_{num}_{i}", type="primary"):
                 if remark.strip():
                     try:
-                        update_delivery_cell(client, int(num), "Jimmy Ship Remark", remark.strip())
+                        update_delivery_cell(client, int(num), "Jimmy Shipp out remark", remark.strip())
                         st.success(f"#{num} shipped!")
                         st.rerun()
                     except Exception as e:
@@ -124,13 +137,12 @@ st.header("✅ Recently Shipped")
 if not shipped:
     st.info("No shipped items yet.")
 else:
-    # Show most recent 10
-    for d in shipped[:10]:
-        num = d.get("Number", "?")
-        pcb = d.get("PCB Name", "Unknown")
-        received = d.get("Jimmy received check", "")
-        remark = d.get("Jimmy Shipp out remark", "")
-        recipient = d.get("Recipient", "")
+    for i, d in enumerate(shipped[:10]):
+        num = _get(d, "Number", "?")
+        pcb = _get(d, "PCB Name", "N/A")
+        received = _get(d, "Jimmy received check")
+        remark = _get(d, "Jimmy Shipp out remark")
+        recipient = _get(d, "Recipient")
 
         with st.expander(f"✅ #{num} — {pcb} | To: {recipient}", expanded=False):
             st.markdown(f"**Received:** {received}")
