@@ -45,6 +45,10 @@ admin_pages = []
 status_pages = []
 logistics_pages = []
 
+logistics_pages = [
+    st.Page("pages/logistics_dashboard.py", title="Logistics", icon="📦"),
+]
+
 if is_admin(user):
     admin_pages = [
         st.Page("pages/admin_all_orders.py", title="All Orders", icon="📊", default=True),
@@ -57,15 +61,11 @@ if is_admin(user):
         st.Page("pages/5_Status.py", title="Status", icon="⚙️"),
     ]
 
-if is_logistics(user):
-    logistics_pages = [
-        st.Page("pages/logistics_dashboard.py", title="Logistics", icon="📦", default=True),
-    ]
-
 # Navigation structure
 if is_admin(user):
     pages = {
         "Admin": admin_pages,
+        "Logistics": logistics_pages,
         "Orders": shared_pages,
         "Tools": translator_page + status_pages,
     }
