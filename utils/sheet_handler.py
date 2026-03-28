@@ -30,11 +30,24 @@ def fetch_stock_data(client: gspread.Client) -> list[dict]:
 
 def add_stock_entry(client: gspread.Client, mpn: str, specs: str = "",
                     project: str = "", note: str = ""):
-    """Add a new MPN entry to the Stock tab (inserted at top, below header)."""
+    """Add a new MPN entry to the Stock tab.
+
+    Only writes to unprotected columns (A, B, F, G, H) to avoid
+    hitting protected columns C:D.
+    """
     sheet = get_spreadsheet(client)
     ws = sheet.worksheet(TAB_STOCK)
-    ws.insert_row([mpn, specs, "", "", "", 0, project, note],
-                  index=2, value_input_option="USER_ENTERED")
+    # Find next empty row in column A
+    col_a = ws.col_values(1)
+    next_row = len(col_a) + 1
+    # Write only to unprotected cells individually
+    ws.update_cell(next_row, 1, mpn)       # A: Component MPN
+    ws.update_cell(next_row, 2, specs)     # B: Specs
+    # Skip C, D (protected)
+    # Skip E (stock check formula)
+    # F: Current Stock - skip (formula)
+    ws.update_cell(next_row, 7, project)   # G: Project
+    ws.update_cell(next_row, 8, note)      # H: Note
 
 
 # --- AllComponents operations ---
