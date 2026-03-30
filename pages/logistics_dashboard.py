@@ -160,7 +160,7 @@ from utils.sheet_handler import fetch_all_components
 components = fetch_all_components(client)
 
 # Filter: only show components with active statuses that Jimmy needs to handle
-ACTIVE_STATUSES = {"To Order", "Ordered", "In Transit", "Recieved"}
+ACTIVE_STATUSES = {"To Order", "Ordered", "In Transit"}
 active_components = [
     c for c in components
     if c.get("Status", "").strip() in ACTIVE_STATUSES
@@ -172,12 +172,12 @@ else:
     st.markdown(f"**{len(active_components)} components** need attention")
 
     # Group by status
-    for target_status in ["To Order", "Ordered", "In Transit", "Recieved"]:
+    for target_status in ["To Order", "Ordered", "In Transit"]:
         group = [c for c in active_components if c.get("Status", "").strip() == target_status]
         if not group:
             continue
 
-        status_icons = {"To Order": "🔴", "Ordered": "🟠", "In Transit": "🚚", "Recieved": "📦"}
+        status_icons = {"To Order": "🔴", "Ordered": "🟠", "In Transit": "🚚"}
         icon = status_icons.get(target_status, "⚪")
 
         st.markdown(f"### {icon} {target_status} ({len(group)})")
