@@ -144,7 +144,14 @@ with st.form("process_form"):
         )
         vendor_order = st.text_input("Vendor Order #", value=order.get("VendorOrderNum", ""))
     with pcol2:
-        eta = st.text_input("ETA (UK)", value=order.get("ETA", ""))
+        current_eta = order.get("ETA", "")
+        try:
+            from datetime import datetime
+            eta_default = datetime.strptime(current_eta, "%Y-%m-%d").date() if current_eta else None
+        except ValueError:
+            eta_default = None
+        eta_date = st.date_input("ETA (UK)", value=eta_default, key="proc_eta")
+        eta = eta_date.strftime("%Y-%m-%d") if eta_date else ""
         notes = st.text_area("Notes", value=order.get("Notes", ""), height=100)
 
     if st.form_submit_button("Save Processing Info", type="primary"):

@@ -1,11 +1,13 @@
 """All Orders - Admin dashboard showing all PCB orders."""
 import json
+from datetime import datetime, date
 
 import streamlit as st
 
 from utils.auth import require_role
 from utils.google_client import get_gspread_client
 from utils.orders_store import fetch_all_orders, update_order, update_checklist
+from utils.sheet_handler import get_next_delivery_number, add_delivery_row
 from config import ORDER_STATUSES, STATUS_COLORS
 
 
@@ -56,7 +58,6 @@ st.markdown(f"**{len(filtered)} orders** shown")
 st.markdown("---")
 
 # --- Order cards ---
-changed = False
 client = get_gspread_client()
 
 for order in filtered:
@@ -106,7 +107,15 @@ for order in filtered:
             # Editable fields
             new_smt = st.text_input("SMT Route", value=order.get("SMTRoute", ""), key=f"smt_{order_id}")
             new_vendor = st.text_input("Vendor Order #", value=order.get("VendorOrderNum", ""), key=f"vendor_{order_id}")
-            new_eta = st.text_input("ETA", value=order.get("ETA", ""), key=f"eta_{order_id}")
+
+            # ETA date picker
+            current_eta = order.get("ETA", "")
+            try:
+                eta_date = datetime.strptime(current_eta, "%Y-%m-%d").date() if current_eta else None
+            except ValueError:
+                eta_date = None
+            new_eta_date = st.date_input("ETA", value=eta_date, key=f"eta_{order_id}")
+            new_eta = new_eta_date.strftime("%Y-%m-%d") if new_eta_date else ""
 
         # File link
         drive_link = order.get("DriveFileLink", "")
@@ -138,7 +147,7 @@ for order in filtered:
             updates_pending["SMTRoute"] = new_smt
         if new_vendor != order.get("VendorOrderNum", ""):
             updates_pending["VendorOrderNum"] = new_vendor
-        if new_eta != order.get("ETA", ""):
+        if new_eta != current_eta:
             updates_pending["ETA"] = new_eta
         if new_notes != order.get("Notes", ""):
             updates_pending["Notes"] = new_notes
@@ -164,6 +173,29 @@ for order in filtered:
                 if st.button(f"→ {next_status.upper()}", key=f"next_{order_id}"):
                     if client:
                         update_order(client, order_id, {"Status": next_status})
+
+                        # Auto-write PCB Delivery when transitioning to "ordered"
+                        if next_status == "ordered":
+                            try:
+                                next_num = get_next_delivery_number(client)
+                                order_date = created.split(" ")[0] if created else datetime.now().strftime("%Y-%m-%d")
+                                delivery_row = [
+                                    next_num,
+                                    order_date,
+                                    priority,
+                                    pcb_name,
+                                    new_vendor or order.get("VendorOrderNum", ""),
+                                    "",  # Photo - skip
+                                    order.get("Recipient", ""),
+                                    "",  # Jimmy received
+                                    "",  # Jimmy ship remark
+                                    new_eta or current_eta,
+                                ]
+                                add_delivery_row(client, delivery_row)
+                                st.success(f"PCB Delivery #{next_num} auto-created!")
+                            except Exception as e:
+                                st.warning(f"Order status updated but PCB Delivery write failed: {e}")
+
                         st.rerun()
 
         if status_idx > 0:
