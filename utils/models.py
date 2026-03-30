@@ -13,7 +13,7 @@ class ChecklistItem:
     id: str
     text: str
     done: bool = False
-    category: str = "general"  # general, smt, fpc, sourcing, jlc_smt
+    category: str = "general"  # general, smt, fpc, sourcing
 
 
 @dataclass
@@ -34,7 +34,11 @@ class Order:
 
 
 def generate_checklist(order: Order) -> list[dict]:
-    """Generate a dynamic checklist based on order type."""
+    """Generate a dynamic checklist based on order type.
+
+    Only includes manual action items. Auto-handled items
+    (PCB Delivery write, Stock MPN add) are excluded.
+    """
     items = []
 
     def add(text: str, category: str = "general"):
@@ -44,33 +48,28 @@ def generate_checklist(order: Order) -> list[dict]:
             category=category,
         )))
 
-    # Universal items
-    add("Place bare board order")
+    # Core items (manual actions only)
+    add("Place bare board order on JLCPCB")
     add("Reply ETA on Slack")
-    add("Update AllComponents sheet")
-    add("Update PCB Delivery sheet")
 
     # SMT items
     if order.needs_smt:
         add("BOM preparation complete", "smt")
-        add("SMT route decided (JLC / Xinhai / Aoxingda)", "smt")
+        add("Decide SMT route (JLC / Xinhai / Aoxingda)", "smt")
+        add("Get supplier quote (if external SMT)", "smt")
+        add("Place SMT order", "smt")
 
     # FPC specific
     if order.pcb_type.upper() == "FPC" or "flex" in order.pcb_name.lower():
         add("Translate stiffener/process notes to Chinese", "fpc")
 
-    # SMT external vendor items
-    if order.needs_smt:
-        add("Supplier quote received (if external SMT)", "smt")
-        add("Order placed", "smt")
-
     # EQ handling
     add("Handle JLCPCB EQ (if any)")
 
-    # Sourcing items
-    add("Special part sourcing (if needed)", "sourcing")
-    add("Ship parts to Jimmy + tracking number (if needed)", "sourcing")
-    add("Register tracking in JLCPCB system (if JLC SMT + external parts)", "sourcing")
-    add("Add MPN to Stock sheet (special sourcing only)", "sourcing")
+    # Sourcing (only manual items)
+    if order.needs_smt:
+        add("Special part sourcing (if needed)", "sourcing")
+        add("Ship parts to Jimmy + fill tracking number", "sourcing")
+        add("Register tracking in JLCPCB system (if JLC SMT + external parts)", "sourcing")
 
     return items

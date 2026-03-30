@@ -152,9 +152,11 @@ for order in filtered:
         if new_notes != order.get("Notes", ""):
             updates_pending["Notes"] = new_notes
 
-        # Action buttons
-        btn_col1, btn_col2, btn_col3, btn_col4 = st.columns(4)
+        # --- Action buttons ---
+        st.markdown("**Actions:**")
+        btn_col1, btn_col2, btn_col3 = st.columns(3)
 
+        # Save button (always available if changes pending)
         if updates_pending or checklist_changed:
             with btn_col1:
                 if st.button("💾 Save Changes", key=f"save_{order_id}", type="primary"):
@@ -165,16 +167,22 @@ for order in filtered:
                     st.success("Saved!")
                     st.rerun()
 
-        # Status transition buttons
-        status_idx = ORDER_STATUSES.index(status) if status in ORDER_STATUSES else 0
-        if status_idx < len(ORDER_STATUSES) - 1:
-            next_status = ORDER_STATUSES[status_idx + 1]
+        # Context-aware status buttons
+        STATUS_ACTIONS = {
+            "new": ("🔧 Start Processing", "processing"),
+            "processing": ("📦 Mark as Ordered", "ordered"),
+            "ordered": ("🚚 Mark as Shipped", "shipped"),
+            "shipped": ("✅ Mark as Delivered", "delivered"),
+        }
+
+        if status in STATUS_ACTIONS:
+            label, next_status = STATUS_ACTIONS[status]
             with btn_col2:
-                if st.button(f"→ {next_status.upper()}", key=f"next_{order_id}"):
+                if st.button(label, key=f"advance_{order_id}"):
                     if client:
                         update_order(client, order_id, {"Status": next_status})
 
-                        # Auto-write PCB Delivery when transitioning to "ordered"
+                        # Auto-write PCB Delivery when marking as ordered
                         if next_status == "ordered":
                             try:
                                 next_num = get_next_delivery_number(client)
@@ -192,16 +200,18 @@ for order in filtered:
                                     new_eta or current_eta,
                                 ]
                                 add_delivery_row(client, delivery_row)
-                                st.success(f"PCB Delivery #{next_num} auto-created!")
+                                st.toast(f"PCB Delivery #{next_num} auto-created!")
                             except Exception as e:
-                                st.warning(f"Order status updated but PCB Delivery write failed: {e}")
+                                st.warning(f"PCB Delivery write failed: {e}")
 
                         st.rerun()
 
-        if status_idx > 0:
+        # Revert button (only if not new)
+        if status != "new":
+            status_idx = ORDER_STATUSES.index(status) if status in ORDER_STATUSES else 0
             prev_status = ORDER_STATUSES[status_idx - 1]
             with btn_col3:
-                if st.button(f"← {prev_status.upper()}", key=f"prev_{order_id}"):
+                if st.button(f"↩ Revert to {prev_status}", key=f"revert_{order_id}"):
                     if client:
                         update_order(client, order_id, {"Status": prev_status})
                         st.rerun()
