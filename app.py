@@ -38,7 +38,8 @@ shared_pages = [
     st.Page("pages/register_component.py", title="Register Component", icon="🔩"),
 ]
 
-translator_page = [
+tools_common = [
+    st.Page("pages/stock_view.py", title="Stock", icon="📦"),
     st.Page("pages/4_Translator.py", title="Translator", icon="🌐"),
 ]
 
@@ -69,18 +70,18 @@ if is_admin(user):
         "Admin": admin_pages,
         "Logistics": logistics_pages,
         "Orders": shared_pages,
-        "Tools": translator_page + status_pages,
+        "Tools": tools_common + status_pages,
     }
 elif is_logistics(user):
     pages = {
         "Logistics": logistics_pages,
         "Orders": shared_pages,
-        "Tools": translator_page,
+        "Tools": tools_common,
     }
 else:
     pages = {
         "Orders": shared_pages,
-        "Tools": translator_page,
+        "Tools": tools_common,
     }
 
 pg = st.navigation(pages)
