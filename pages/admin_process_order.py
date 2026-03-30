@@ -26,14 +26,57 @@ if not active_orders:
     st.success("All orders have been delivered!")
     st.stop()
 
-# Order selector
-order_options = {
-    f"{o.get('OrderID')} | {o.get('PCBName')} | {o.get('EngineerName')} | {o.get('Status', '').upper()}": o
-    for o in active_orders
-}
+# --- Visual overview list ---
+st.subheader("Active Orders Overview")
 
-selected_label = st.selectbox("Select an order to process", list(order_options.keys()))
-order = order_options[selected_label]
+status_icons = {"new": "⚪", "processing": "🔵", "ordered": "🟠", "shipped": "🟣", "delivered": "🟢"}
+selected_order_id = None
+
+for o in active_orders:
+    oid = o.get("OrderID", "?")
+    pcb = o.get("PCBName", "?")
+    eng = o.get("EngineerName", "")
+    s = o.get("Status", "new")
+    pri = o.get("Priority", "Normal")
+    eta = o.get("ETA", "")
+    smt = o.get("SMTRoute", "")
+    icon = status_icons.get(s, "⚪")
+    pri_icon = "🔴" if pri == "URGENT" else ""
+
+    cols = st.columns([0.5, 3, 1.5, 1.5, 1.5, 1])
+    with cols[0]:
+        st.markdown(f"{icon}")
+    with cols[1]:
+        st.markdown(f"**{pcb}** — {eng} {pri_icon}")
+    with cols[2]:
+        st.markdown(f"`{s.upper()}`")
+    with cols[3]:
+        st.markdown(f"{smt or '-'}")
+    with cols[4]:
+        st.markdown(f"ETA: {eta or '-'}")
+    with cols[5]:
+        if st.button("Open", key=f"open_{oid}"):
+            selected_order_id = oid
+
+# Check session state for selected order
+if selected_order_id:
+    st.session_state["process_order_id"] = selected_order_id
+
+sel_id = st.session_state.get("process_order_id")
+if not sel_id:
+    st.info("Click **Open** on an order above to process it.")
+    st.stop()
+
+# Find the selected order
+order = next((o for o in active_orders if o.get("OrderID") == sel_id), None)
+if not order:
+    st.warning("Selected order not found. It may have been delivered.")
+    if st.button("Clear selection"):
+        del st.session_state["process_order_id"]
+        st.rerun()
+    st.stop()
+
+st.markdown("---")
 
 order_id = order.get("OrderID", "?")
 status = order.get("Status", "new")

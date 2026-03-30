@@ -90,7 +90,7 @@ for order in filtered:
         f"👤 {engineer} | :{status_color}[{status.upper()}] | {pct:.0%} done"
     )
 
-    with st.expander(header, expanded=(status not in ["delivered", "shipped"])):
+    with st.expander(header, expanded=False):
         # Info row
         info1, info2, info3 = st.columns(3)
         with info1:
