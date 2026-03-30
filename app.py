@@ -59,6 +59,7 @@ if is_admin(user):
         st.Page("pages/3_Sheet_Update.py", title="Sheet Update", icon="📝"),
     ]
     status_pages = [
+        st.Page("pages/admin_user_management.py", title="User Management", icon="👥"),
         st.Page("pages/5_Status.py", title="Status", icon="⚙️"),
     ]
 

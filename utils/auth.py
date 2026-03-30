@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from config import ALLOWED_USERS, IS_LOCAL
+from config import IS_LOCAL
 
 
 def _get_cloud_email() -> str:
@@ -41,14 +41,26 @@ def _get_cloud_email() -> str:
     return ""
 
 
+def _get_allowed_users() -> dict:
+    """Get allowed users from Sheet (with fallback to config)."""
+    try:
+        from utils.user_store import fetch_allowed_users
+        return fetch_allowed_users()
+    except Exception:
+        from config import ALLOWED_USERS
+        return ALLOWED_USERS
+
+
 def _prompt_email_login() -> str | None:
     """Show a simple email selector for Cloud deployment without OAuth."""
     st.markdown("### 👤 Select Your Account")
     st.markdown("Choose your name to continue:")
 
+    allowed = _get_allowed_users()
+
     # Build unique name list
     names_seen = {}
-    for email, info in ALLOWED_USERS.items():
+    for email, info in allowed.items():
         name = info["name"]
         if name not in names_seen:
             names_seen[name] = {"email": email, "role": info["role"]}
@@ -90,7 +102,8 @@ def get_current_user() -> dict | None:
     if not email:
         return None
 
-    user_info = ALLOWED_USERS.get(email)
+    allowed = _get_allowed_users()
+    user_info = allowed.get(email)
     if user_info is None:
         return None
 
