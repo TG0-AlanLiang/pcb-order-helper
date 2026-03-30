@@ -39,7 +39,7 @@ def highlight_role(row):
         return ["background-color: #e3f2fd"] * len(row)
     return [""] * len(row)
 
-st.dataframe(df.style.apply(highlight_role, axis=1), use_container_width=True, hide_index=True)
+st.dataframe(df.style.apply(highlight_role, axis=1), width="stretch", hide_index=True)
 
 st.markdown(f"**{len(users)} users** total — "
             f"{sum(1 for u in users.values() if u['role'] == 'admin')} admins, "

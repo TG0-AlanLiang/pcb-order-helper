@@ -95,7 +95,7 @@ with st.form("delivery_form"):
         "Number", "Order Date", "Priority", "PCB Name", "Vendor Order #",
         "Photo", "Recipient", "Jimmy Received", "Jimmy Ship Remark", "ETA (UK)",
     ])
-    st.dataframe(preview_df, use_container_width=True)
+    st.dataframe(preview_df, width="stretch")
 
     if st.form_submit_button("Write to PCB Delivery", type="primary"):
         try:

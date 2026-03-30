@@ -51,7 +51,7 @@ client = get_gspread_client()
 if status_idx > 0:
     with scol1:
         prev_status = ORDER_STATUSES[status_idx - 1]
-        if st.button(f"⬅ Back to {prev_status.upper()}", use_container_width=True):
+        if st.button(f"⬅ Back to {prev_status.upper()}", width="stretch"):
             if client:
                 update_order(client, order_id, {"Status": prev_status})
                 st.rerun()
@@ -62,7 +62,7 @@ with scol2:
 if status_idx < len(ORDER_STATUSES) - 1:
     with scol3:
         next_status = ORDER_STATUSES[status_idx + 1]
-        if st.button(f"Advance to {next_status.upper()} ➡", type="primary", use_container_width=True):
+        if st.button(f"Advance to {next_status.upper()} ➡", type="primary", width="stretch"):
             if client:
                 update_order(client, order_id, {"Status": next_status})
                 st.rerun()

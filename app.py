@@ -91,7 +91,7 @@ with st.sidebar:
     role_badge = "🔑 Admin" if is_admin(user) else "📦 Logistics" if is_logistics(user) else "👤 Engineer"
     st.markdown(f"{role_badge} **{user['name']}**")
     st.caption(user["email"])
-    if st.button("Logout", type="secondary", use_container_width=True):
+    if st.button("Logout", type="secondary", width="stretch"):
         del st.session_state["auth_email"]
         del st.session_state["user"]
         st.rerun()

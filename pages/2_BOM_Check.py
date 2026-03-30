@@ -54,7 +54,7 @@ if bom_file:
 
     # Show parsed BOM
     st.header("3. Parsed BOM")
-    st.dataframe(bom_df, use_container_width=True, height=400)
+    st.dataframe(bom_df, width="stretch", height=400)
 
     # --- Stock Check ---
     st.header("4. Stock Check")
@@ -89,7 +89,7 @@ if bom_file:
 
     st.dataframe(
         result_df.style.apply(highlight_status, axis=1),
-        use_container_width=True,
+        width="stretch",
         height=500,
     )
 
