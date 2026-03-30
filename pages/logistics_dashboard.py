@@ -118,16 +118,26 @@ else:
                 placeholder="e.g. SF1562763341561\n5 to 杭州临平区乔司街道天\nThe rest to UK Shaoze",
                 height=100,
             )
-            if st.button("📦 Mark Shipped", key=f"logship_btn_{num}_{i}", type="primary"):
-                if remark.strip():
+            btn1, btn2 = st.columns(2)
+            with btn1:
+                if st.button("📦 Mark Shipped", key=f"logship_btn_{num}_{i}", type="primary"):
+                    if remark.strip():
+                        try:
+                            update_delivery_cell(client, int(num), "Jimmy Shipp out remark", remark.strip())
+                            st.success(f"#{num} shipped!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed: {e}")
+                    else:
+                        st.warning("Please enter shipping remark before marking as shipped.")
+            with btn2:
+                if st.button("📥 Keep in Stock", key=f"logstock_btn_{num}_{i}"):
                     try:
-                        update_delivery_cell(client, int(num), "Jimmy Shipp out remark", remark.strip())
-                        st.success(f"#{num} shipped!")
+                        update_delivery_cell(client, int(num), "Jimmy Shipp out remark", "入库存 Keep in stock")
+                        st.success(f"#{num} marked as stocked!")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Failed: {e}")
-                else:
-                    st.warning("Please enter shipping remark before marking as shipped.")
 
 # ============================================================
 # C. SHIPPED (Recent)
