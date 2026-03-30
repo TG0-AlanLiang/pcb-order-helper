@@ -86,6 +86,45 @@ def get_next_component_id(client: gspread.Client) -> int:
     return max_id + 1
 
 
+def update_component_cell(client: gspread.Client, component_id: int,
+                          column_name: str, value: str):
+    """Update a specific cell in AllComponents by component ID and column name.
+
+    Args:
+        client: authenticated gspread client
+        component_id: the ID value in column A
+        column_name: header name from row 2 (e.g. "Status", "Notes")
+        value: the new cell value
+    """
+    sheet = get_spreadsheet(client)
+    ws = sheet.worksheet(TAB_ALL_COMPONENTS)
+    all_values = ws.get_all_values()
+    if len(all_values) < 3:
+        raise ValueError("AllComponents tab has no data")
+
+    headers = all_values[1]  # Row 2 is headers
+
+    # Find column index by header name (handle multiline headers)
+    col_idx = None
+    for i, h in enumerate(headers):
+        if h.strip().startswith(column_name) or column_name in h:
+            col_idx = i + 1  # 1-indexed
+            break
+    if col_idx is None:
+        raise ValueError(f"Column '{column_name}' not found in headers")
+
+    # Find row by ID (column A, starting from row 3)
+    for row_idx, row in enumerate(all_values[2:], start=3):
+        try:
+            if int(row[0]) == component_id:
+                ws.update_cell(row_idx, col_idx, value)
+                return
+        except (ValueError, IndexError):
+            continue
+
+    raise ValueError(f"Component ID {component_id} not found")
+
+
 def add_component_rows(client: gspread.Client, rows: list[list]):
     """Add multiple rows to AllComponents tab (inserted at top, below headers).
 

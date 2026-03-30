@@ -155,23 +155,25 @@ st.markdown("---")
 st.header("🔄 Component Tracking")
 st.caption("Components from AllComponents that still need action")
 
-from utils.sheet_handler import fetch_all_components
+from utils.sheet_handler import fetch_all_components, update_component_cell
 
 components = fetch_all_components(client)
 
-# Filter: only show components with active statuses that Jimmy needs to handle
+# Filter: only show components with active statuses
 ACTIVE_STATUSES = {"To Order", "Ordered", "In Transit"}
 active_components = [
     c for c in components
     if c.get("Status", "").strip() in ACTIVE_STATUSES
 ]
 
+ALL_STATUSES = ["To Order", "Ordered", "In Transit", "Recieved", "DeliveredToVendor", "From Stock", "Cancelled"]
+SOURCES = ["", "From Stock", "From UK", "LCSC", "Taobao", "DigiKey", "Mouser", "Supplier"]
+
 if not active_components:
     st.success("No pending components!")
 else:
     st.markdown(f"**{len(active_components)} components** need attention")
 
-    # Group by status
     for target_status in ["To Order", "Ordered", "In Transit"]:
         group = [c for c in active_components if c.get("Status", "").strip() == target_status]
         if not group:
@@ -181,27 +183,77 @@ else:
         icon = status_icons.get(target_status, "⚪")
 
         st.markdown(f"### {icon} {target_status} ({len(group)})")
-        for c in group:
+        for idx, c in enumerate(group):
             cid = c.get("ID", "?")
             pcb = c.get("PCB Name", "").strip() if c.get("PCB Name") else "N/A"
             mpn = c.get("MPN", "").strip() if c.get("MPN") else "N/A"
             comp = c.get("Components", "").strip() if c.get("Components") else ""
             supplier = c.get("Supplier & Obj", "").strip() if c.get("Supplier & Obj") else ""
             notes = c.get("Notes", "").strip() if c.get("Notes") else ""
-            bom_qty = c.get("BOM Quantity\nProduction needed\nOutcome Qty", "")
-            order_qty = c.get("Order Quantity\nIncoming Qty\n(excess count into stock)", "")
+            source = c.get("Component cource", "").strip() if c.get("Component cource") else ""
+            bom_qty = ""
+            order_qty = ""
+            for k, v in c.items():
+                if "BOM" in k:
+                    bom_qty = v
+                if "Order Quantity" in k:
+                    order_qty = v
             poc = c.get("Point of contact", "").strip() if c.get("Point of contact") else ""
 
-            with st.container():
-                mc1, mc2, mc3 = st.columns([3, 2, 2])
-                with mc1:
-                    st.markdown(f"**#{cid}** — {pcb}")
-                    st.markdown(f"MPN: `{mpn}` {f'({comp})' if comp else ''}")
-                with mc2:
-                    st.caption(f"Supplier: {supplier or 'N/A'}")
-                    st.caption(f"BOM: {bom_qty} | Order: {order_qty}")
-                with mc3:
-                    st.caption(f"Contact: {poc}")
-                    if notes:
-                        st.caption(f"Notes: {notes}")
-                st.divider()
+            with st.expander(f"**#{cid}** — {pcb} | `{mpn}` | BOM: {bom_qty} | Order: {order_qty}", expanded=False):
+                # Info row
+                ic1, ic2 = st.columns(2)
+                with ic1:
+                    st.markdown(f"**MPN:** `{mpn}` {f'({comp})' if comp else ''}")
+                    st.markdown(f"**Supplier:** {supplier or 'N/A'}")
+                    st.markdown(f"**Contact:** {poc or 'N/A'}")
+                with ic2:
+                    st.markdown(f"**BOM Qty:** {bom_qty} | **Order Qty:** {order_qty}")
+                    st.markdown(f"**Current Status:** {target_status}")
+                    st.markdown(f"**Source:** {source or 'N/A'}")
+
+                # Editable fields
+                st.markdown("---")
+                ec1, ec2, ec3 = st.columns(3)
+                with ec1:
+                    current_status_idx = ALL_STATUSES.index(target_status) if target_status in ALL_STATUSES else 0
+                    new_status = st.selectbox(
+                        "Update Status",
+                        ALL_STATUSES,
+                        index=current_status_idx,
+                        key=f"comp_status_{cid}_{idx}",
+                    )
+                with ec2:
+                    current_source_idx = SOURCES.index(source) if source in SOURCES else 0
+                    new_source = st.selectbox(
+                        "Component Source",
+                        SOURCES,
+                        index=current_source_idx,
+                        key=f"comp_source_{cid}_{idx}",
+                    )
+                with ec3:
+                    new_notes = st.text_input(
+                        "Notes",
+                        value=notes,
+                        key=f"comp_notes_{cid}_{idx}",
+                    )
+
+                if st.button("💾 Save Changes", key=f"comp_save_{cid}_{idx}", type="primary"):
+                    try:
+                        changes = 0
+                        if new_status != target_status:
+                            update_component_cell(client, int(cid), "Status", new_status)
+                            changes += 1
+                        if new_source != source:
+                            update_component_cell(client, int(cid), "Component cource", new_source)
+                            changes += 1
+                        if new_notes != notes:
+                            update_component_cell(client, int(cid), "Notes", new_notes)
+                            changes += 1
+                        if changes > 0:
+                            st.success(f"#{cid} updated!")
+                            st.rerun()
+                        else:
+                            st.info("No changes to save.")
+                    except Exception as e:
+                        st.error(f"Failed: {e}")
