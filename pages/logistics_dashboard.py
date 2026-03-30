@@ -149,36 +149,59 @@ else:
             st.markdown(f"**Ship Remark:** {remark}")
 
 # ============================================================
-# D. MATERIAL TRANSFER (from Orders tab)
+# D. COMPONENT TRACKING (from AllComponents tab)
 # ============================================================
 st.markdown("---")
-st.header("🔄 Material Transfer")
-st.caption("Orders that need parts forwarded to SMT vendors")
+st.header("🔄 Component Tracking")
+st.caption("Components from AllComponents that still need action")
 
-orders = fetch_all_orders()
-smt_orders = [o for o in orders
-              if o.get("NeedsSMT") == "Yes"
-              and o.get("Status") in ("processing", "ordered")]
+from utils.sheet_handler import fetch_all_components
 
-if not smt_orders:
-    st.info("No material transfers pending.")
+components = fetch_all_components(client)
+
+# Filter: only show components with active statuses that Jimmy needs to handle
+ACTIVE_STATUSES = {"To Order", "Ordered", "In Transit", "Recieved"}
+active_components = [
+    c for c in components
+    if c.get("Status", "").strip() in ACTIVE_STATUSES
+]
+
+if not active_components:
+    st.success("No pending components!")
 else:
-    for o in smt_orders:
-        order_id = o.get("OrderID", "?")
-        pcb = o.get("PCBName", "Unknown")
-        smt_route = o.get("SMTRoute", "Not decided")
-        engineer = o.get("EngineerName", "")
-        status = o.get("Status", "")
+    st.markdown(f"**{len(active_components)} components** need attention")
 
-        with st.container():
-            mc1, mc2 = st.columns([3, 2])
-            with mc1:
-                st.markdown(f"**{pcb}** (Order: `{order_id}`)")
-                st.markdown(f"Engineer: {engineer} | Status: {status.upper()}")
-            with mc2:
-                st.markdown(f"**SMT Route:** {smt_route or 'TBD'}")
-                if smt_route:
-                    st.caption(f"Forward parts to: {smt_route}")
-                else:
-                    st.caption("Waiting for Alan to decide SMT route")
-            st.divider()
+    # Group by status
+    for target_status in ["To Order", "Ordered", "In Transit", "Recieved"]:
+        group = [c for c in active_components if c.get("Status", "").strip() == target_status]
+        if not group:
+            continue
+
+        status_icons = {"To Order": "🔴", "Ordered": "🟠", "In Transit": "🚚", "Recieved": "📦"}
+        icon = status_icons.get(target_status, "⚪")
+
+        st.markdown(f"### {icon} {target_status} ({len(group)})")
+        for c in group:
+            cid = c.get("ID", "?")
+            pcb = c.get("PCB Name", "").strip() if c.get("PCB Name") else "N/A"
+            mpn = c.get("MPN", "").strip() if c.get("MPN") else "N/A"
+            comp = c.get("Components", "").strip() if c.get("Components") else ""
+            supplier = c.get("Supplier & Obj", "").strip() if c.get("Supplier & Obj") else ""
+            notes = c.get("Notes", "").strip() if c.get("Notes") else ""
+            bom_qty = c.get("BOM Quantity\nProduction needed\nOutcome Qty", "")
+            order_qty = c.get("Order Quantity\nIncoming Qty\n(excess count into stock)", "")
+            poc = c.get("Point of contact", "").strip() if c.get("Point of contact") else ""
+
+            with st.container():
+                mc1, mc2, mc3 = st.columns([3, 2, 2])
+                with mc1:
+                    st.markdown(f"**#{cid}** — {pcb}")
+                    st.markdown(f"MPN: `{mpn}` {f'({comp})' if comp else ''}")
+                with mc2:
+                    st.caption(f"Supplier: {supplier or 'N/A'}")
+                    st.caption(f"BOM: {bom_qty} | Order: {order_qty}")
+                with mc3:
+                    st.caption(f"Contact: {poc}")
+                    if notes:
+                        st.caption(f"Notes: {notes}")
+                st.divider()
