@@ -115,7 +115,6 @@ def highlight_stock(row):
 
 st.dataframe(
     filtered.style.apply(highlight_stock, axis=1),
-    width=None,
     height=600,
     hide_index=True,
 )
