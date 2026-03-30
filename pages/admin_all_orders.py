@@ -187,12 +187,20 @@ for order in filtered:
                             try:
                                 next_num = get_next_delivery_number(client)
                                 order_date = created.split(" ")[0] if created else datetime.now().strftime("%Y-%m-%d")
+                                # Build vendor order field: order# + SMT route if applicable
+                                vendor_num = new_vendor or order.get("VendorOrderNum", "")
+                                smt_route = new_smt or order.get("SMTRoute", "")
+                                if needs_smt and smt_route:
+                                    vendor_display = f"{vendor_num}; {smt_route}" if vendor_num else smt_route
+                                else:
+                                    vendor_display = vendor_num
+
                                 delivery_row = [
                                     next_num,
                                     order_date,
                                     priority,
                                     pcb_name,
-                                    new_vendor or order.get("VendorOrderNum", ""),
+                                    vendor_display,
                                     "",  # Photo - skip
                                     order.get("Recipient", ""),
                                     "",  # Jimmy received

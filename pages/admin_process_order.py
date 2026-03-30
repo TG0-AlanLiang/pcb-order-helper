@@ -137,10 +137,10 @@ with st.form("process_form"):
     with pcol1:
         smt_route = st.selectbox(
             "SMT Route",
-            ["", "JLC", "Xinhai (新海)", "Aoxingda (奥兴达)", "N/A - Bare Board"],
-            index=["", "JLC", "Xinhai (新海)", "Aoxingda (奥兴达)", "N/A - Bare Board"].index(
+            ["", "JLC", "Xinhai (新海)", "Ausinter (奥兴达)", "N/A - Bare Board"],
+            index=["", "JLC", "Xinhai (新海)", "Ausinter (奥兴达)", "N/A - Bare Board"].index(
                 order.get("SMTRoute", "")
-            ) if order.get("SMTRoute", "") in ["", "JLC", "Xinhai (新海)", "Aoxingda (奥兴达)", "N/A - Bare Board"] else 0,
+            ) if order.get("SMTRoute", "") in ["", "JLC", "Xinhai (新海)", "Ausinter (奥兴达)", "N/A - Bare Board"] else 0,
         )
         vendor_order = st.text_input("Vendor Order #", value=order.get("VendorOrderNum", ""))
     with pcol2:

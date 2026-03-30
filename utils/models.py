@@ -55,7 +55,7 @@ def generate_checklist(order: Order) -> list[dict]:
     # SMT items
     if order.needs_smt:
         add("BOM preparation complete", "smt")
-        add("Decide SMT route (JLC / Xinhai / Aoxingda)", "smt")
+        add("Decide SMT route (JLC / Xinhai / Ausinter)", "smt")
         add("Get supplier quote (if external SMT)", "smt")
         add("Place SMT order", "smt")
 
