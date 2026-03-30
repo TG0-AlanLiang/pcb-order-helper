@@ -77,6 +77,9 @@ if not order:
     st.stop()
 
 st.markdown("---")
+if st.button("⬆ Close Details", key="collapse_btn"):
+    del st.session_state["process_order_id"]
+    st.rerun()
 
 order_id = order.get("OrderID", "?")
 status = order.get("Status", "new")
