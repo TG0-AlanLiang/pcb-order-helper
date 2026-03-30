@@ -36,6 +36,7 @@ shared_pages = [
     st.Page("pages/ee_submit_order.py", title="Submit Order", icon="📋"),
     st.Page("pages/ee_my_orders.py", title="My Orders", icon="📦"),
     st.Page("pages/register_component.py", title="Register Component", icon="🔩"),
+    st.Page("pages/ee_my_components.py", title="My Components", icon="🔩"),
 ]
 
 tools_common = [
