@@ -40,21 +40,20 @@ with st.form("register_component"):
         order_qty = st.number_input("Order Quantity", min_value=0, value=0)
         priority = st.selectbox("Priority", ["Normal", "URGENT"])
         category = st.selectbox("Category", ["IC", "Mechanical", "Connector", "Passive", "Other"])
-        supplier = st.text_input("Supplier", placeholder="e.g. Mouser, DigiKey, Taobao")
+        supplier = st.text_input("Supplier & Destination",
+                                 placeholder="e.g. Send to Xinhai, Keep in stock, Send all to JLC")
 
-    st.subheader("Forwarding Info")
+    st.subheader("Source & Notes")
     col3, col4 = st.columns(2)
     with col3:
-        status = st.selectbox("Status", [
-            "To Order",
-            "Ordered",
-            "In Transit",
-            "Delivered to Jimmy",
-            "Forwarded to Vendor",
+        component_source = st.selectbox("Component Source", [
             "From Stock",
-        ])
+            "From UK",
+            "From JLC",
+            "To Order",
+        ], help="Where is this component coming from?")
     with col4:
-        notes = st.text_input("Notes", placeholder="e.g. Forward to Xinhai after received")
+        notes = st.text_input("Notes (optional)", placeholder="e.g. Order from DigiKey, Lead time 2 weeks")
 
     submitted = st.form_submit_button("Register Component", type="primary")
 
@@ -78,13 +77,13 @@ if submitted:
         category,                                   # K: Category
         "",                                         # L: JLC SMT Order
         "",                                         # M: PCB Quantity
-        supplier.strip(),                           # N: Supplier
-        "",                                         # O: Component source
-        status,                                     # P: Status
+        supplier.strip(),                           # N: Supplier & Obj
+        component_source,                           # O: Component source
+        "To Order",                                 # P: Status (default, Jimmy changes this)
         datetime.now().strftime("%Y-%m-%d"),         # Q: Order date
         "",                                         # R: ETD
         user["name"],                               # S: Point of contact
-        notes.strip(),                              # T: Notes
+        notes.strip(),                              # T: Notes (Jimmy fills tracking/storage)
     ]
 
     try:
