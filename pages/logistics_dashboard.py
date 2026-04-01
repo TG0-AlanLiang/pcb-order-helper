@@ -74,7 +74,7 @@ st.markdown("---")
 # ============================================================
 # A. PENDING RECEIPT (collapsible)
 # ============================================================
-with st.expander(f"📥 **Pending Receipt** ({len(pending_receipt)})", expanded=len(pending_receipt) > 0):
+with st.expander(f"📥 **Pending Receipt** ({len(pending_receipt)})", expanded=False):
     if not pending_receipt:
         st.success("All items received!")
     else:
@@ -108,7 +108,7 @@ with st.expander(f"📥 **Pending Receipt** ({len(pending_receipt)})", expanded=
 # ============================================================
 # B. READY TO SHIP (collapsible)
 # ============================================================
-with st.expander(f"📤 **Ready to Ship** ({len(ready_to_ship)})", expanded=len(ready_to_ship) > 0):
+with st.expander(f"📤 **Ready to Ship** ({len(ready_to_ship)})", expanded=False):
     if not ready_to_ship:
         st.success("Nothing waiting to ship!")
     else:
@@ -152,7 +152,7 @@ with st.expander(f"📤 **Ready to Ship** ({len(ready_to_ship)})", expanded=len(
 # ============================================================
 # C. COMPONENT TRACKING (collapsible) — based on Notes being empty
 # ============================================================
-with st.expander(f"🔄 **Component Tracking** ({len(actionable_components)})", expanded=len(actionable_components) > 0):
+with st.expander(f"🔄 **Component Tracking** ({len(actionable_components)})", expanded=False):
     if not actionable_components:
         st.success("No pending components!")
     else:
