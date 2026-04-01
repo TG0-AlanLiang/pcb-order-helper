@@ -60,20 +60,26 @@ else:  # FPC
     col1, col2 = st.columns(2)
     with col1:
         layers = st.selectbox("Layers", [1, 2, 4], index=1)
-        thickness = st.selectbox("Thickness",
-            ["0.11mm", "0.12mm", "0.20mm"],
-            index=0)
         copper_type = st.selectbox("Copper Type",
             ["ED (Electrodeposited)", "RA (Rolled Annealed)"],
             index=0,
-            help="RA copper is more flexible, recommended for dynamic flex areas")
+            help="RA copper is more flexible but only available in 0.11mm thickness")
+
+        # Thickness depends on copper type
+        if "RA" in copper_type:
+            thickness = st.selectbox("Thickness", ["0.11mm"], index=0,
+                                     help="RA copper only available in 0.11mm")
+        else:
+            thickness = st.selectbox("Thickness", ["0.11mm", "0.12mm", "0.20mm"], index=0)
+
         coverlay_color = st.selectbox("Coverlay Color",
             ["Yellow", "Black", "White"],
             index=0)
     with col2:
-        surface_finish = st.selectbox("Surface Finish",
-            ["ENIG (Immersion Gold)", "HASL (Lead)", "Lead-free HASL"],
-            index=0)
+        # FPC can only use ENIG
+        surface_finish = "ENIG (Immersion Gold)"
+        st.selectbox("Surface Finish", ["ENIG (Immersion Gold)"], index=0,
+                     disabled=True, help="FPC only supports ENIG")
         stiffener = st.selectbox("Stiffener",
             ["None", "PI Stiffener", "FR4 Stiffener", "Steel Stiffener", "3M Adhesive Tape"],
             index=0)
