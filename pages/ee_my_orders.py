@@ -4,7 +4,9 @@ import json
 import streamlit as st
 
 from utils.auth import require_auth, is_admin
-from utils.orders_store import fetch_all_orders, fetch_orders_by_engineer
+from utils.google_client import get_gspread_client
+from utils.orders_store import fetch_all_orders, fetch_orders_by_engineer, update_order
+from utils.drive_handler import upload_file
 from config import ORDER_STATUSES, STATUS_COLORS
 
 
@@ -13,7 +15,7 @@ user = require_auth()
 st.title("📦 My Orders")
 st.markdown(f"Viewing orders for: **{user['name']}** ({user['email']})")
 
-# Admin can see all orders here too (filtered by dropdown)
+# Admin can see all orders here too
 if is_admin(user):
     orders = fetch_all_orders()
     st.info(f"Admin view - showing all {len(orders)} orders")
@@ -25,17 +27,13 @@ if not orders:
     st.stop()
 
 # Sort: non-delivered first, then by creation date descending
-def sort_key(o):
-    status = o.get("Status", "new")
-    is_done = 1 if status == "delivered" else 0
-    return (is_done, o.get("CreatedAt", ""))
-
-orders.sort(key=sort_key)
-orders.reverse()  # Most recent first within each group, but delivered at bottom
-# Fix: delivered should be at the bottom
 delivered = [o for o in orders if o.get("Status") == "delivered"]
 active = [o for o in orders if o.get("Status") != "delivered"]
+active.sort(key=lambda o: o.get("CreatedAt", ""), reverse=True)
+delivered.sort(key=lambda o: o.get("CreatedAt", ""), reverse=True)
 orders = active + delivered
+
+client = get_gspread_client()
 
 for order in orders:
     order_id = order.get("OrderID", "?")
@@ -46,8 +44,8 @@ for order in orders:
     pcb_type = order.get("PCBType", "Rigid")
     quantity = order.get("Quantity", "")
     engineer = order.get("EngineerName", "")
+    engineer_email = order.get("EngineerEmail", "")
 
-    # Status badge
     status_idx = ORDER_STATUSES.index(status) if status in ORDER_STATUSES else 0
     progress_pct = status_idx / (len(ORDER_STATUSES) - 1)
 
@@ -58,20 +56,8 @@ for order in orders:
     if is_admin(user):
         header += f" | 👤 {engineer}"
 
-    with st.expander(header, expanded=(status != "delivered")):
-        # Progress bar
+    with st.expander(header, expanded=False):
         st.progress(progress_pct)
-
-        # Status timeline
-        status_line = ""
-        for i, s in enumerate(ORDER_STATUSES):
-            if i == status_idx:
-                status_line += f" **→ {s.upper()} ←** "
-            elif i < status_idx:
-                status_line += f" ~~{s}~~ >"
-            else:
-                status_line += f" {s} >"
-        st.markdown(status_line.rstrip(">").rstrip())
 
         # Details
         col1, col2, col3 = st.columns(3)
@@ -91,12 +77,10 @@ for order in orders:
             st.markdown(f"**Vendor Order #:** {vendor or 'Pending'}")
             st.markdown(f"**SMT Route:** {smt_route or 'N/A'}")
 
-        # Recipient
         recipient = order.get("Recipient", "")
         if recipient:
             st.markdown(f"**Recipient:** {recipient}")
 
-        # Notes from admin
         notes = order.get("Notes", "")
         if notes:
             st.markdown(f"**Notes:** {notes}")
@@ -105,3 +89,48 @@ for order in orders:
         drive_link = order.get("DriveFileLink", "")
         if drive_link:
             st.markdown(f"📁 [View uploaded files on Google Drive]({drive_link})")
+
+        # --- Actions: Re-upload + Delete ---
+        # Only owner or admin can act
+        can_act = is_admin(user) or (engineer_email.lower() == user["email"].lower())
+
+        if can_act:
+            st.markdown("---")
+            act1, act2 = st.columns(2)
+
+            # Re-upload file
+            with act1:
+                new_file = st.file_uploader(
+                    "Re-upload file",
+                    type=["rar", "zip", "7z"],
+                    key=f"reupload_{order_id}",
+                )
+                if new_file and st.button("📤 Upload", key=f"upload_btn_{order_id}"):
+                    try:
+                        file_bytes = new_file.read()
+                        new_link = upload_file(
+                            file_bytes=file_bytes,
+                            filename=new_file.name,
+                            pcb_name=pcb_name,
+                        )
+                        if client:
+                            update_order(client, order_id, {"DriveFileLink": new_link})
+                        st.success(f"File updated: {new_file.name}")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Upload failed: {e}")
+
+            # Delete order (only if status is "new")
+            with act2:
+                if status == "new":
+                    st.warning("Delete this order?")
+                    if st.button("🗑 Delete Order", key=f"delete_{order_id}"):
+                        try:
+                            if client:
+                                update_order(client, order_id, {"Status": "cancelled"})
+                            st.success(f"Order {order_id} cancelled.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed: {e}")
+                elif status != "delivered" and status != "cancelled":
+                    st.caption("Order already in progress — contact Alan to cancel.")

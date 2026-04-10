@@ -139,7 +139,7 @@ for order in filtered:
                 checklist_changed = True
 
         # Notes
-        new_notes = st.text_area("Notes", value=order.get("Notes", ""), key=f"notes_{order_id}", height=80)
+        new_notes = st.text_area("Notes", value=order.get("Notes", ""), key=f"notes_{order_id}", height=200)
 
         # Save changes button
         updates_pending = {}

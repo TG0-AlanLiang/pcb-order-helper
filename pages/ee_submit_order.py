@@ -38,11 +38,12 @@ if pcb_type == "Rigid":
         solder_mask = st.selectbox("Solder Mask Color",
             ["Green", "Red", "Yellow", "Blue", "White", "Black", "Matte Black", "JLC Purple"])
         surface_finish = st.selectbox("Surface Finish",
-            ["HASL (Lead)", "Lead-free HASL", "ENIG (Immersion Gold)"],
+            ["ENIG (Immersion Gold)", "HASL (Lead)", "Lead-free HASL"],
             index=0)
     with col2:
-        min_drill = st.selectbox("Min Hole Size",
-            ["0.3mm (Free)", "0.25mm", "0.2mm", "0.15mm", "0.1mm"],
+        min_drill = st.selectbox("Min Drill / Via Size (inner/outer diameter)",
+            ["0.3mm / 0.45mm (Free)", "0.25mm / 0.4mm", "0.2mm / 0.35mm",
+             "0.15mm / 0.3mm", "0.1mm / 0.25mm"],
             index=0)
         via_covering = st.selectbox("Via Covering",
             ["Tented (Solder mask plug)", "Untented (Open window)",

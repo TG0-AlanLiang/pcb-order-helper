@@ -231,7 +231,7 @@ with st.form("process_form"):
             eta_default = None
         eta_date = st.date_input("ETA (UK)", value=eta_default, key="proc_eta")
         eta = eta_date.strftime("%Y-%m-%d") if eta_date else ""
-        notes = st.text_area("Notes", value=order.get("Notes", ""), height=100)
+        notes = st.text_area("Notes", value=order.get("Notes", ""), height=200)
 
     if st.form_submit_button("Save Processing Info", type="primary"):
         if client:
