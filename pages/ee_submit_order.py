@@ -12,15 +12,23 @@ user = require_auth()
 st.title("📋 Submit New PCB Order")
 st.markdown(f"Submitting as: **{user['name']}** ({user['email']})")
 
+# Check for reorder data
+reorder = st.session_state.pop("reorder_data", {})
+if reorder:
+    st.success(f"Reordering: **{reorder.get('pcb_name', '')}** — review and update specs below.")
+
 # ============================================================
 # PCB Name + Type (these control downstream options)
 # ============================================================
 st.subheader("1. Basic Info")
 col_a, col_b, col_c = st.columns(3)
 with col_a:
-    pcb_name = st.text_input("PCB Name *", placeholder="e.g. EZ1_Main_revC")
+    pcb_name = st.text_input("PCB Name *", value=reorder.get("pcb_name", ""),
+                             placeholder="e.g. EZ1_Main_revC")
 with col_b:
-    pcb_type = st.selectbox("PCB Type *", ["Rigid", "FPC"],
+    type_options = ["Rigid", "FPC"]
+    type_idx = type_options.index(reorder["pcb_type"]) if reorder.get("pcb_type") in type_options else 0
+    pcb_type = st.selectbox("PCB Type *", type_options, index=type_idx,
                             help="Select first — options below change based on type")
 with col_c:
     pcb_vendor = st.selectbox("PCB Vendor", ["JLCPCB", "JDB"],
@@ -113,11 +121,15 @@ else:  # FPC
 st.subheader("3. Order Details")
 col3, col4 = st.columns(2)
 with col3:
-    quantity = st.number_input("Quantity", min_value=1, max_value=10000, value=5)
-    priority = st.selectbox("Priority", ["Normal", "URGENT"])
+    reorder_qty = int(reorder.get("quantity", 5) or 5)
+    quantity = st.number_input("Quantity", min_value=1, max_value=10000, value=reorder_qty)
+    pri_options = ["Normal", "URGENT"]
+    pri_idx = pri_options.index(reorder["priority"]) if reorder.get("priority") in pri_options else 0
+    priority = st.selectbox("Priority", pri_options, index=pri_idx)
 with col4:
     test_by_engineer = st.selectbox("Test by Engineer?", ["No", "Yes"])
-    recipient = st.text_input("Recipient *", placeholder="e.g. Send all to Berk")
+    recipient = st.text_input("Recipient *", value=reorder.get("recipient", ""),
+                              placeholder="e.g. Send all to Berk")
 
 # ============================================================
 # SMT & Notes
@@ -125,7 +137,7 @@ with col4:
 st.subheader("4. Assembly & Notes")
 col5, col6 = st.columns(2)
 with col5:
-    needs_smt = st.checkbox("Needs SMT (Assembly)")
+    needs_smt = st.checkbox("Needs SMT (Assembly)", value=reorder.get("needs_smt", False))
 with col6:
     notes = st.text_area("Notes (optional)",
                          placeholder="Any special requirements, process notes, stiffener details...",

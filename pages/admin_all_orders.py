@@ -48,12 +48,17 @@ if priority_filter != "all":
 if engineer_filter != "all":
     filtered = [o for o in filtered if o.get("EngineerName") == engineer_filter]
 
-# Sort: URGENT first, then by date
+# Sort: URGENT first, then newest first within same priority
 filtered.sort(key=lambda o: (
     0 if o.get("Priority") == "URGENT" else 1,
-    o.get("CreatedAt", ""),
-))
-filtered.reverse()
+    "9999" if not o.get("CreatedAt") else o.get("CreatedAt"),
+), reverse=False)
+# Within each priority group, reverse by date (newest first)
+urgent = [o for o in filtered if o.get("Priority") == "URGENT"]
+normal = [o for o in filtered if o.get("Priority") != "URGENT"]
+urgent.sort(key=lambda o: o.get("CreatedAt", ""), reverse=True)
+normal.sort(key=lambda o: o.get("CreatedAt", ""), reverse=True)
+filtered = urgent + normal
 
 st.markdown(f"**{len(filtered)} orders** shown")
 st.markdown("---")

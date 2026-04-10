@@ -157,3 +157,21 @@ for order in orders:
             if new_msg.strip() and client:
                 send_message(client, order_id, user["name"], new_msg.strip())
                 st.rerun()
+
+        # --- Reorder button ---
+        st.markdown("---")
+        if st.button("🔄 Reorder (same specs)", key=f"reorder_{order_id}"):
+            st.session_state["reorder_data"] = {
+                "pcb_name": pcb_name,
+                "pcb_type": pcb_type,
+                "layers": order.get("Layers", "2"),
+                "thickness": order.get("Thickness", "1.6mm"),
+                "solder_mask": order.get("SolderMask", "Green"),
+                "quantity": quantity,
+                "priority": priority,
+                "recipient": recipient,
+                "needs_smt": order.get("NeedsSMT", "No") == "Yes",
+                "notes": order.get("Notes", ""),
+            }
+            st.info("Order specs copied! Go to **Submit Order** to complete the reorder.")
+            st.switch_page("pages/ee_submit_order.py")
