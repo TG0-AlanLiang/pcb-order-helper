@@ -8,6 +8,7 @@ from utils.auth import require_role
 from utils.google_client import get_gspread_client
 from utils.orders_store import fetch_all_orders, update_order, update_checklist
 from utils.sheet_handler import get_next_delivery_number, add_delivery_row
+from utils.message_store import fetch_messages_for_order, send_message
 from config import ORDER_STATUSES, STATUS_COLORS
 
 
@@ -151,6 +152,30 @@ for order in filtered:
             updates_pending["ETA"] = new_eta
         if new_notes != order.get("Notes", ""):
             updates_pending["Notes"] = new_notes
+
+        # --- Messages ---
+        st.markdown("**💬 Messages:**")
+        messages = fetch_messages_for_order(order_id)
+        if messages:
+            for m in messages:
+                author = m.get("Author", "")
+                ts = m.get("Timestamp", "")
+                content = m.get("Content", "")
+                is_me = author == user["name"]
+                prefix = "🟢" if is_me else "🔵"
+                st.markdown(f"{prefix} **{author}** ({ts}): {content}")
+        else:
+            st.caption("No messages.")
+
+        mc1, mc2 = st.columns([4, 1])
+        with mc1:
+            new_msg = st.text_input("Message", key=f"msg_{order_id}", placeholder="Ask engineer or leave note...",
+                                    label_visibility="collapsed")
+        with mc2:
+            if st.button("Send", key=f"msgsend_{order_id}"):
+                if new_msg.strip() and client:
+                    send_message(client, order_id, user["name"], new_msg.strip())
+                    st.rerun()
 
         # --- Action buttons ---
         st.markdown("**Actions:**")

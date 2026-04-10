@@ -16,12 +16,15 @@ st.markdown(f"Submitting as: **{user['name']}** ({user['email']})")
 # PCB Name + Type (these control downstream options)
 # ============================================================
 st.subheader("1. Basic Info")
-col_a, col_b = st.columns(2)
+col_a, col_b, col_c = st.columns(3)
 with col_a:
     pcb_name = st.text_input("PCB Name *", placeholder="e.g. EZ1_Main_revC")
 with col_b:
     pcb_type = st.selectbox("PCB Type *", ["Rigid", "FPC"],
                             help="Select first — options below change based on type")
+with col_c:
+    pcb_vendor = st.selectbox("PCB Vendor", ["JLCPCB", "JDB"],
+                              help="JDB and JLCPCB share the same PCB options")
 
 # ============================================================
 # Specifications (dynamic based on PCB type)
@@ -177,9 +180,9 @@ if st.button("Submit Order", type="primary", key="submit_order_btn"):
                 st.error(f"File upload failed: {e}")
 
     # Build full notes with extra specs
-    full_notes = extra_specs
+    full_notes = f"[Vendor: {pcb_vendor}] {extra_specs}"
     if notes.strip():
-        full_notes = f"{extra_specs}\n---\n{notes.strip()}"
+        full_notes = f"[Vendor: {pcb_vendor}] {extra_specs}\n---\n{notes.strip()}"
 
     # Create order
     with st.spinner("Creating order..."):
