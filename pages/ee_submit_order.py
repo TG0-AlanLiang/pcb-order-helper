@@ -75,14 +75,20 @@ else:  # FPC
         copper_type = st.selectbox("Copper Type",
             ["ED (Electrodeposited)", "RA (Rolled Annealed)"],
             index=0,
-            help="RA copper is more flexible but only available in 0.11mm thickness")
+            help="RA copper is more flexible. JLC: RA limited to 0.11mm. JDB: RA available on all thicknesses.")
 
-        # Thickness depends on copper type
-        if "RA" in copper_type:
-            thickness = st.selectbox("Thickness", ["0.11mm"], index=0,
-                                     help="RA copper only available in 0.11mm")
+        # Thickness depends on vendor + copper type
+        if pcb_vendor == "JDB":
+            # JDB: 0.10/0.13/0.20, all support RA
+            thickness = st.selectbox("Thickness", ["0.10mm", "0.13mm", "0.20mm"], index=0,
+                                     help="JDB thickness options")
         else:
-            thickness = st.selectbox("Thickness", ["0.11mm", "0.12mm", "0.20mm"], index=0)
+            # JLC: RA only on 0.11mm
+            if "RA" in copper_type:
+                thickness = st.selectbox("Thickness", ["0.11mm"], index=0,
+                                         help="JLC: RA copper only available in 0.11mm")
+            else:
+                thickness = st.selectbox("Thickness", ["0.11mm", "0.12mm", "0.20mm"], index=0)
 
         coverlay_color = st.selectbox("Coverlay Color",
             ["Yellow", "Black", "White"],
@@ -92,9 +98,13 @@ else:  # FPC
         surface_finish = "ENIG (Immersion Gold)"
         st.selectbox("Surface Finish", ["ENIG (Immersion Gold)"], index=0,
                      disabled=True, help="FPC only supports ENIG")
-        stiffener = st.selectbox("Stiffener",
-            ["None", "PI Stiffener", "FR4 Stiffener", "Steel Stiffener", "3M Adhesive Tape"],
-            index=0)
+        stiffeners = st.multiselect("Stiffeners (select multiple if needed)",
+            ["PI Stiffener", "FR4 Stiffener", "Steel Stiffener", "3M Adhesive Tape"],
+            default=[],
+            help="You can select multiple stiffener types for different areas")
+        stiffener_thickness = st.text_input("Stiffener Thickness",
+            placeholder="e.g. 0.2mm, or 0.1mm + 0.2mm for multiple PI layers",
+            help="You can input multiple thicknesses (e.g. for 0.1mm and 0.2mm PI stiffeners)")
         emi_shield = st.selectbox("EMI Shielding",
             ["None", "Double-sided (Black) 18um", "Single-sided (Black) 18um"],
             index=0)
@@ -102,10 +112,22 @@ else:  # FPC
             ["No requirement (Free)", "+/-20% (Free)", "+/-10%"],
             index=0)
 
+    # Gold finger thickness control (optional)
+    gold_finger_thickness = st.text_input(
+        "Gold Finger Total Thickness (optional)",
+        placeholder="e.g. 0.3mm (bare board + stiffener = target total)",
+        help="If the board has a gold finger, specify the required total thickness (bare board + stiffener)."
+    )
+
     # Build FPC specs string
     fpc_parts = [f"Copper: {copper_type}", f"Coverlay: {coverlay_color}", f"Surface: {surface_finish}"]
-    if stiffener != "None":
-        fpc_parts.append(f"Stiffener: {stiffener}")
+    if stiffeners:
+        stiffener_str = " + ".join(stiffeners)
+        if stiffener_thickness.strip():
+            stiffener_str += f" ({stiffener_thickness.strip()})"
+        fpc_parts.append(f"Stiffeners: {stiffener_str}")
+    if gold_finger_thickness.strip():
+        fpc_parts.append(f"Gold Finger Total: {gold_finger_thickness.strip()}")
     if emi_shield != "None":
         fpc_parts.append(f"EMI: {emi_shield}")
     if impedance != "No requirement (Free)":
