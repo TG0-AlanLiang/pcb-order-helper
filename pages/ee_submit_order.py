@@ -34,6 +34,17 @@ with col_c:
     pcb_vendor = st.selectbox("PCB Vendor", ["JLCPCB", "JDB"],
                               help="JDB and JLCPCB share the same PCB options")
 
+# Board dimensions
+dim1, dim2 = st.columns(2)
+with dim1:
+    board_length = st.number_input("Board Length (cm) *", min_value=0.0, max_value=100.0,
+                                   value=0.0, step=0.01, format="%.2f",
+                                   help="Longest side of the board in cm")
+with dim2:
+    board_width = st.number_input("Board Width (cm) *", min_value=0.0, max_value=100.0,
+                                  value=0.0, step=0.01, format="%.2f",
+                                  help="Shorter side of the board in cm")
+
 # ============================================================
 # Specifications (dynamic based on PCB type)
 # ============================================================
@@ -73,9 +84,9 @@ else:  # FPC
     with col1:
         layers = st.selectbox("Layers", [1, 2, 4], index=1)
         copper_type = st.selectbox("Copper Type",
-            ["ED (Electrodeposited)", "RA (Rolled Annealed)"],
+            ["RA (Rolled Annealed)", "ED (Electrodeposited)"],
             index=0,
-            help="RA copper is more flexible. JLC: RA limited to 0.11mm. JDB: RA available on all thicknesses.")
+            help="RA (压延铜) is default — more flexible. JLC: RA limited to 0.11mm. JDB: RA available on all thicknesses.")
 
         # Thickness depends on vendor + copper type
         if pcb_vendor == "JDB":
@@ -165,9 +176,15 @@ with col6:
                          placeholder="Any special requirements, process notes, stiffener details...",
                          height=100)
 
+# Prepend dimensions to extra_specs
+if board_length > 0 and board_width > 0:
+    dimensions_str = f"Size: {board_length:.2f} x {board_width:.2f} cm"
+    extra_specs = f"{dimensions_str} | {extra_specs}"
+
 # Show spec summary
 with st.expander("Spec Summary (auto-generated)"):
     st.markdown(f"**Type:** {pcb_type} | **Layers:** {layers} | **Thickness:** {thickness}")
+    st.markdown(f"**Size:** {board_length:.2f} x {board_width:.2f} cm")
     st.markdown(f"**Solder Mask:** {solder_mask} | **Qty:** {quantity} | **Priority:** {priority}")
     st.markdown(f"**Details:** {extra_specs}")
 
@@ -188,6 +205,9 @@ st.markdown("---")
 if st.button("Submit Order", type="primary", key="submit_order_btn"):
     if not pcb_name.strip():
         st.error("PCB Name is required!")
+        st.stop()
+    if board_length <= 0 or board_width <= 0:
+        st.error("Board dimensions (length & width) are required!")
         st.stop()
     if not recipient.strip():
         st.error("Recipient is required!")

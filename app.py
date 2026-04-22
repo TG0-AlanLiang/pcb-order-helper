@@ -57,6 +57,7 @@ if is_admin(user):
     admin_pages = [
         st.Page("pages/admin_all_orders.py", title="All Orders", icon="📊", default=True),
         st.Page("pages/admin_process_order.py", title="Process Order", icon="🔧"),
+        st.Page("pages/admin_order_history.py", title="Order History", icon="📚"),
         st.Page("pages/1_New_Order.py", title="New Order (Slack)", icon="💬"),
         st.Page("pages/2_BOM_Check.py", title="BOM Check", icon="🔍"),
         st.Page("pages/3_Sheet_Update.py", title="Sheet Update", icon="📝"),

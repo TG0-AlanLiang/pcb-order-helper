@@ -15,10 +15,13 @@ from config import ORDER_STATUSES, STATUS_COLORS
 user = require_role("admin")
 
 st.title("📊 All Orders")
+st.caption("Delivered orders are moved to **Order History** — see sidebar.")
 
-orders = fetch_all_orders()
+all_orders = fetch_all_orders()
+# Exclude delivered orders (they're in Order History page)
+orders = [o for o in all_orders if o.get("Status") != "delivered"]
 if not orders:
-    st.info("No orders yet.")
+    st.info("No active orders. Check Order History for delivered orders.")
     st.stop()
 
 # --- Summary metrics ---
