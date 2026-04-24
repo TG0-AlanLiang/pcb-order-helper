@@ -169,6 +169,7 @@ with st.expander(f"🔄 **Component Tracking** ({len(actionable_components)})", 
             status = c.get("Status", "").strip()
             source = (c.get("Component cource", "") or "").strip()
             notes = (c.get("Notes", "") or "").strip()
+            registor = (c.get("Registor", "") or "").strip()
 
             bom_qty = ""
             order_qty = ""
@@ -178,7 +179,8 @@ with st.expander(f"🔄 **Component Tracking** ({len(actionable_components)})", 
                 if "Order Quantity" in k:
                     order_qty = v
 
-            with st.expander(f"**#{cid}** — {pcb} | `{mpn}` | → {supplier}", expanded=False):
+            reg_suffix = f" | by {registor}" if registor else ""
+            with st.expander(f"**#{cid}** — {pcb} | `{mpn}` | → {supplier}{reg_suffix}", expanded=False):
                 ic1, ic2 = st.columns(2)
                 with ic1:
                     st.markdown(f"**MPN:** `{mpn}`")
@@ -187,6 +189,8 @@ with st.expander(f"🔄 **Component Tracking** ({len(actionable_components)})", 
                 with ic2:
                     st.markdown(f"**Status:** {status}")
                     st.markdown(f"**Source:** {source or 'N/A'}")
+                    if registor:
+                        st.markdown(f"**Registered by:** {registor}")
 
                 st.markdown("---")
                 ec1, ec2, ec3 = st.columns(3)

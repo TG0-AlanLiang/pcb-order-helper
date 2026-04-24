@@ -62,7 +62,7 @@ if submitted:
         st.error("PCB Name and MPN are required!")
         st.stop()
 
-    # Build AllComponents row (20 columns A-T)
+    # Build AllComponents row (21 columns A-U)
     row = [
         next_id,                                    # A: ID
         datetime.now().strftime("%Y-%m-%d"),         # B: Record Date
@@ -84,6 +84,7 @@ if submitted:
         "",                                         # R: ETD
         user["name"],                               # S: Point of contact
         notes.strip(),                              # T: Notes (Jimmy fills tracking/storage)
+        user["name"],                               # U: Registor
     ]
 
     try:
