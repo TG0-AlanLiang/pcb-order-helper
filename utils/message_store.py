@@ -23,7 +23,7 @@ def _get_messages_worksheet(client: gspread.Client) -> gspread.Worksheet:
         return ws
 
 
-@st.cache_data(ttl=15, show_spinner=False)
+@st.cache_data(ttl=30, show_spinner=False)
 def _fetch_messages_cached(_sheet_id: str) -> list[dict]:
     from utils.google_client import get_gspread_client
     client = get_gspread_client()

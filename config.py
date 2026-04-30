@@ -87,8 +87,11 @@ ORDERS_HEADERS = [
     "PCBName", "Layers", "PCBType", "Thickness", "SolderMask",
     "Quantity", "Priority", "Recipient", "NeedsSMT", "SMTRoute",
     "VendorOrderNum", "ETA", "Notes", "DriveFileLink", "ChecklistJSON",
-    "TestByEngineer",
+    "TestByEngineer", "BareBoardCostCNY", "BOMCostCNY", "SMTCostCNY",
 ]
+
+# Currency conversion (manual rate, update as needed)
+CNY_TO_GBP = 0.11
 
 # --- User configuration ---
 # Two UK email domains are interchangeable: @tangi0.com ↔ @tg0.co.uk

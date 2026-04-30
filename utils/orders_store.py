@@ -40,7 +40,7 @@ def _parse_rows(ws: gspread.Worksheet) -> list[dict]:
     return records
 
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def _fetch_all_orders_cached(_sheet_id: str, _tab: str) -> list[dict]:
     """Cached fetch - internal, do not call directly."""
     from utils.google_client import get_gspread_client

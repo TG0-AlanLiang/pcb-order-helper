@@ -10,7 +10,7 @@ from utils.orders_store import fetch_all_orders, update_order, update_checklist
 from utils.drive_handler import download_file_bytes, download_to_local
 from utils.message_store import fetch_messages_for_order, send_message
 from utils.sheet_handler import get_next_delivery_number, add_delivery_row
-from config import ORDER_STATUSES, STATUS_COLORS, IS_LOCAL
+from config import ORDER_STATUSES, STATUS_COLORS, IS_LOCAL, CNY_TO_GBP
 
 
 user = require_role("admin")
@@ -251,6 +251,51 @@ with st.form("process_form"):
                 st.rerun()
             else:
                 st.info("No changes to save.")
+
+st.markdown("---")
+
+# --- Cost Tracking ---
+st.subheader("💰 Cost Tracking (CNY)")
+
+def _to_float(v):
+    try:
+        return float(str(v).strip()) if str(v).strip() else 0.0
+    except (ValueError, TypeError):
+        return 0.0
+
+current_bare = _to_float(order.get("BareBoardCostCNY", ""))
+current_bom = _to_float(order.get("BOMCostCNY", ""))
+current_smt = _to_float(order.get("SMTCostCNY", ""))
+
+with st.form("cost_form"):
+    cc1, cc2, cc3 = st.columns(3)
+    with cc1:
+        bare_cost = st.number_input("Bare Board (CNY)", min_value=0.0, value=current_bare, step=1.0, format="%.2f")
+    with cc2:
+        bom_cost = st.number_input("BOM (CNY)", min_value=0.0, value=current_bom, step=1.0, format="%.2f")
+    with cc3:
+        smt_cost = st.number_input("SMT (CNY)", min_value=0.0, value=current_smt, step=1.0, format="%.2f")
+
+    total_cny = bare_cost + bom_cost + smt_cost
+    total_gbp = total_cny * CNY_TO_GBP
+
+    st.markdown(f"**Total: ¥{total_cny:,.2f} CNY ≈ £{total_gbp:,.2f} GBP**  *(rate: 1 CNY = {CNY_TO_GBP} GBP)*")
+
+    if st.form_submit_button("Save Costs", type="primary"):
+        if client:
+            cost_updates = {}
+            if bare_cost != current_bare:
+                cost_updates["BareBoardCostCNY"] = str(bare_cost)
+            if bom_cost != current_bom:
+                cost_updates["BOMCostCNY"] = str(bom_cost)
+            if smt_cost != current_smt:
+                cost_updates["SMTCostCNY"] = str(smt_cost)
+            if cost_updates:
+                update_order(client, order_id, cost_updates)
+                st.success("Costs saved!")
+                st.rerun()
+            else:
+                st.info("No changes.")
 
 st.markdown("---")
 

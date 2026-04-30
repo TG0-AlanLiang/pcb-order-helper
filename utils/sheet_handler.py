@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Optional
 
 import gspread
+import streamlit as st
 
 from config import (
     GOOGLE_SHEET_ID,
@@ -18,14 +19,32 @@ def get_spreadsheet(client: gspread.Client) -> gspread.Spreadsheet:
     return client.open_by_key(GOOGLE_SHEET_ID)
 
 
+# --- Cache invalidation helpers ---
+
+def _invalidate_pcb_delivery_cache():
+    fetch_pcb_delivery.clear()
+
+
+def _invalidate_components_cache():
+    fetch_all_components.clear()
+
+
+def _invalidate_stock_cache():
+    fetch_stock_data.clear()
+
+
 # --- Stock operations ---
 
-def fetch_stock_data(client: gspread.Client) -> list[dict]:
-    """Fetch all stock data from the Stock tab."""
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_stock_data(_client_id: str = "") -> list[dict]:
+    """Fetch all stock data from the Stock tab. Cached 2 minutes."""
+    from utils.google_client import get_gspread_client
+    client = get_gspread_client()
+    if not client:
+        return []
     sheet = get_spreadsheet(client)
     ws = sheet.worksheet(TAB_STOCK)
-    records = ws.get_all_records()
-    return records
+    return ws.get_all_records()
 
 
 def add_stock_entry(client: gspread.Client, mpn: str, specs: str = "",
@@ -48,12 +67,18 @@ def add_stock_entry(client: gspread.Client, mpn: str, specs: str = "",
     # F: Current Stock - skip (formula)
     ws.update_cell(next_row, 7, project)   # G: Project
     ws.update_cell(next_row, 8, note)      # H: Note
+    _invalidate_stock_cache()
 
 
 # --- AllComponents operations ---
 
-def fetch_all_components(client: gspread.Client) -> list[dict]:
-    """Fetch all records from AllComponents tab."""
+@st.cache_data(ttl=60, show_spinner=False)
+def fetch_all_components(_client=None) -> list[dict]:
+    """Fetch all records from AllComponents tab. Cached 60s."""
+    from utils.google_client import get_gspread_client
+    client = get_gspread_client()
+    if not client:
+        return []
     sheet = get_spreadsheet(client)
     ws = sheet.worksheet(TAB_ALL_COMPONENTS)
     all_values = ws.get_all_values()
@@ -118,6 +143,7 @@ def update_component_cell(client: gspread.Client, component_id: int,
         try:
             if int(row[0]) == component_id:
                 ws.update_cell(row_idx, col_idx, value)
+                _invalidate_components_cache()
                 return
         except (ValueError, IndexError):
             continue
@@ -135,12 +161,18 @@ def add_component_rows(client: gspread.Client, rows: list[list]):
     ws = sheet.worksheet(TAB_ALL_COMPONENTS)
     for row in rows:
         ws.insert_row(row, index=3, value_input_option="USER_ENTERED")
+    _invalidate_components_cache()
 
 
 # --- PCB Delivery operations ---
 
-def fetch_pcb_delivery(client: gspread.Client) -> list[dict]:
-    """Fetch all records from PCB Delivery tab."""
+@st.cache_data(ttl=60, show_spinner=False)
+def fetch_pcb_delivery(_client=None) -> list[dict]:
+    """Fetch all records from PCB Delivery tab. Cached 60s."""
+    from utils.google_client import get_gspread_client
+    client = get_gspread_client()
+    if not client:
+        return []
     sheet = get_spreadsheet(client)
     ws = sheet.worksheet(TAB_PCB_DELIVERY)
     all_values = ws.get_all_values()
@@ -182,6 +214,7 @@ def add_delivery_row(client: gspread.Client, row: list):
     sheet = get_spreadsheet(client)
     ws = sheet.worksheet(TAB_PCB_DELIVERY)
     ws.insert_row(row, index=2, value_input_option="USER_ENTERED")
+    _invalidate_pcb_delivery_cache()
 
 
 def update_delivery_cell(client: gspread.Client, delivery_number: int,
@@ -210,6 +243,7 @@ def update_delivery_cell(client: gspread.Client, delivery_number: int,
         try:
             if int(row[0]) == delivery_number:
                 ws.update_cell(row_idx, col_idx, value)
+                _invalidate_pcb_delivery_cache()
                 return
         except (ValueError, IndexError):
             continue

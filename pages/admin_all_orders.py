@@ -9,7 +9,7 @@ from utils.google_client import get_gspread_client
 from utils.orders_store import fetch_all_orders, update_order, update_checklist
 from utils.sheet_handler import get_next_delivery_number, add_delivery_row
 from utils.message_store import fetch_messages_for_order, send_message
-from config import ORDER_STATUSES, STATUS_COLORS
+from config import ORDER_STATUSES, STATUS_COLORS, CNY_TO_GBP
 
 
 user = require_role("admin")
@@ -130,6 +130,18 @@ for order in filtered:
         drive_link = order.get("DriveFileLink", "")
         if drive_link:
             st.markdown(f"📁 [View files on Drive]({drive_link})")
+
+        # Cost display (admin only sees this page)
+        def _to_f(v):
+            try: return float(str(v).strip()) if str(v).strip() else 0.0
+            except (ValueError, TypeError): return 0.0
+        bare_c = _to_f(order.get("BareBoardCostCNY", ""))
+        bom_c = _to_f(order.get("BOMCostCNY", ""))
+        smt_c = _to_f(order.get("SMTCostCNY", ""))
+        total_cny = bare_c + bom_c + smt_c
+        if total_cny > 0:
+            total_gbp = total_cny * CNY_TO_GBP
+            st.markdown(f"💰 **Cost:** Bare ¥{bare_c:.0f} + BOM ¥{bom_c:.0f} + SMT ¥{smt_c:.0f} = **¥{total_cny:,.2f} CNY (£{total_gbp:,.2f} GBP)**")
 
         # Progress bar
         st.progress(pct)

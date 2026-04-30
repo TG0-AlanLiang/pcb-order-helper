@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from utils.auth import require_role
 from utils.google_client import get_gspread_client
 from utils.orders_store import fetch_all_orders
-from config import STATUS_COLORS
+from config import STATUS_COLORS, CNY_TO_GBP
 
 
 user = require_role("admin")
@@ -25,10 +25,23 @@ if not history:
     st.info("No delivered or cancelled orders yet.")
     st.stop()
 
+# Helpers
+def _to_f(v):
+    try: return float(str(v).strip()) if str(v).strip() else 0.0
+    except (ValueError, TypeError): return 0.0
+
+# Calc total cost across history
+total_cost_cny = sum(
+    _to_f(o.get("BareBoardCostCNY")) + _to_f(o.get("BOMCostCNY")) + _to_f(o.get("SMTCostCNY"))
+    for o in history
+)
+total_cost_gbp = total_cost_cny * CNY_TO_GBP
+
 # Summary
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 col1.metric("Delivered", sum(1 for o in history if o.get("Status") == "delivered"))
 col2.metric("Cancelled", sum(1 for o in history if o.get("Status") == "cancelled"))
+col3.metric("Total Cost", f"£{total_cost_gbp:,.0f}", help=f"¥{total_cost_cny:,.0f} CNY (rate: 1 CNY = {CNY_TO_GBP} GBP)")
 
 st.markdown("---")
 
@@ -91,6 +104,15 @@ for order in filtered:
             st.markdown(f"**SMT Route:** {order.get('SMTRoute', 'N/A')}")
             st.markdown(f"**Vendor Order #:** {order.get('VendorOrderNum', 'N/A')}")
             st.markdown(f"**ETA:** {order.get('ETA', 'N/A')}")
+
+        # Cost
+        bare_c = _to_f(order.get("BareBoardCostCNY"))
+        bom_c = _to_f(order.get("BOMCostCNY"))
+        smt_c = _to_f(order.get("SMTCostCNY"))
+        order_total_cny = bare_c + bom_c + smt_c
+        if order_total_cny > 0:
+            order_total_gbp = order_total_cny * CNY_TO_GBP
+            st.markdown(f"💰 **Cost:** Bare ¥{bare_c:.0f} + BOM ¥{bom_c:.0f} + SMT ¥{smt_c:.0f} = **¥{order_total_cny:,.2f} CNY (£{order_total_gbp:,.2f} GBP)**")
 
         drive_link = order.get("DriveFileLink", "")
         if drive_link:
