@@ -116,6 +116,9 @@ else:  # FPC
         stiffener_thickness = st.text_input("Stiffener Thickness",
             placeholder="e.g. 0.2mm, or 0.1mm + 0.2mm for multiple PI layers",
             help="You can input multiple thicknesses (e.g. for 0.1mm and 0.2mm PI stiffeners)")
+        silkscreen_on_stiffener = st.checkbox("Print silkscreen on stiffener (补强上印丝印)",
+            value=True,
+            help="Default ON — usually needed unless you have a specific reason to exclude")
         emi_shield = st.selectbox("EMI Shielding",
             ["None", "Double-sided (Black) 18um", "Single-sided (Black) 18um"],
             index=0)
@@ -136,6 +139,8 @@ else:  # FPC
         stiffener_str = " + ".join(stiffeners)
         if stiffener_thickness.strip():
             stiffener_str += f" ({stiffener_thickness.strip()})"
+        if silkscreen_on_stiffener:
+            stiffener_str += " [silkscreen on stiffener]"
         fpc_parts.append(f"Stiffeners: {stiffener_str}")
     if gold_finger_thickness.strip():
         fpc_parts.append(f"Gold Finger Total: {gold_finger_thickness.strip()}")
