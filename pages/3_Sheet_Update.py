@@ -88,6 +88,7 @@ with st.form("delivery_form"):
         "",  # Jimmy received
         "",  # Jimmy ship remark
         d_eta,
+        order.get("engineer", ""),  # Register
     ]
 
     st.markdown("**Preview:**")

@@ -139,6 +139,7 @@ if status_idx < len(ORDER_STATUSES) - 1:
                             "",  # Jimmy received
                             "",  # Jimmy ship remark
                             order.get("ETA", ""),
+                            order.get("EngineerName", ""),  # Register (engineer name)
                         ]
                         add_delivery_row(client, delivery_row)
                         st.toast(f"PCB Delivery #{next_num} auto-created!")
@@ -155,6 +156,8 @@ col1, col2 = st.columns(2)
 with col1:
     st.markdown(f"**Order ID:** `{order_id}`")
     st.markdown(f"**Engineer:** {order.get('EngineerName', '')} ({order.get('EngineerEmail', '')})")
+    if order.get("Reviewer"):
+        st.markdown(f"**Reviewer:** {order.get('Reviewer', '')}")
     st.markdown(f"**Submitted:** {order.get('CreatedAt', '')}")
     st.markdown(f"**PCB Name:** {order.get('PCBName', '')}")
     st.markdown(f"**PCB Type:** {order.get('PCBType', '')}")

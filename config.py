@@ -70,6 +70,7 @@ PCB_DELIVERY_COLS = {
     "Jimmy received check": "H",
     "Jimmy Shipp out remark": "I",
     "ETA (UK)": "J",
+    "Register": "K",
 }
 
 # Column mappings for Stock
@@ -88,6 +89,7 @@ ORDERS_HEADERS = [
     "Quantity", "Priority", "Recipient", "NeedsSMT", "SMTRoute",
     "VendorOrderNum", "ETA", "Notes", "DriveFileLink", "ChecklistJSON",
     "TestByEngineer", "BareBoardCostCNY", "BOMCostCNY", "SMTCostCNY",
+    "Reviewer",
 ]
 
 # Currency conversion (manual rate, update as needed)

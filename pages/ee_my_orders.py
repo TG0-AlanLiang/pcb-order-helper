@@ -5,7 +5,7 @@ import streamlit as st
 
 from utils.auth import require_auth, is_admin
 from utils.google_client import get_gspread_client
-from utils.orders_store import fetch_all_orders, fetch_orders_by_engineer, update_order
+from utils.orders_store import fetch_all_orders, fetch_orders_for_user, update_order
 from utils.drive_handler import upload_file
 from utils.message_store import fetch_messages_for_order, send_message
 from config import ORDER_STATUSES, STATUS_COLORS
@@ -21,7 +21,9 @@ if is_admin(user):
     orders = fetch_all_orders()
     st.info(f"Admin view - showing all {len(orders)} orders")
 else:
-    orders = fetch_orders_by_engineer(user["email"])
+    # Show orders where user is engineer OR reviewer
+    orders = fetch_orders_for_user(user["email"], user["name"])
+    st.caption("Showing orders where you're the engineer or reviewer.")
 
 if not orders:
     st.info("No orders found. Go to **Submit Order** to create one.")
@@ -66,6 +68,9 @@ for order in orders:
             st.markdown(f"**Order ID:** `{order_id}`")
             st.markdown(f"**Submitted:** {created}")
             st.markdown(f"**Engineer:** {engineer}")
+            reviewer_name = order.get("Reviewer", "")
+            if reviewer_name:
+                st.markdown(f"**Reviewer:** {reviewer_name}")
         with col2:
             st.markdown(f"**Layers:** {order.get('Layers', 'N/A')}")
             st.markdown(f"**Thickness:** {order.get('Thickness', 'N/A')}")

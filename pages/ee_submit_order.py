@@ -169,6 +169,14 @@ with col4:
     recipient = st.text_input("Recipient *", value=reorder.get("recipient", ""),
                               placeholder="e.g. Send all to Berk")
 
+# Reviewer (second EE)
+from utils.user_store import fetch_allowed_users
+all_users = fetch_allowed_users()
+# Build unique name list, excluding current user
+reviewer_names = sorted({info["name"] for email, info in all_users.items() if info["name"] != user["name"]})
+reviewer = st.selectbox("Reviewer (second EE who can answer EQs) *", ["-- Select --"] + reviewer_names,
+                       help="Pick a colleague who reviewed/will help review this design. They can also answer EQs.")
+
 # ============================================================
 # SMT & Notes
 # ============================================================
@@ -217,6 +225,9 @@ if st.button("Submit Order", type="primary", key="submit_order_btn"):
     if not recipient.strip():
         st.error("Recipient is required!")
         st.stop()
+    if reviewer == "-- Select --":
+        st.error("Reviewer is required! Pick a colleague who can help answer EQs.")
+        st.stop()
 
     client = get_gspread_client()
     if not client:
@@ -261,6 +272,7 @@ if st.button("Submit Order", type="primary", key="submit_order_btn"):
                 "engineer_email": user["email"],
                 "engineer_name": user["name"],
                 "drive_file_link": drive_link,
+                "reviewer": reviewer,
             }
             order_id = create_order(client, order_data)
             st.success(f"Order submitted! Order ID: **{order_id}**")

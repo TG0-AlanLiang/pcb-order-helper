@@ -105,6 +105,9 @@ for order in filtered:
         with info1:
             st.markdown(f"**ID:** `{order_id}`")
             st.markdown(f"**Engineer:** {engineer}")
+            reviewer_name = order.get("Reviewer", "")
+            if reviewer_name:
+                st.markdown(f"**Reviewer:** {reviewer_name}")
             st.markdown(f"**Recipient:** {order.get('Recipient', 'N/A')}")
             st.markdown(f"**Submitted:** {created}")
         with info2:
@@ -251,6 +254,7 @@ for order in filtered:
                                     "",  # Jimmy received
                                     "",  # Jimmy ship remark
                                     new_eta or current_eta,
+                                    engineer,  # Register (engineer name)
                                 ]
                                 add_delivery_row(client, delivery_row)
                                 st.toast(f"PCB Delivery #{next_num} auto-created!")

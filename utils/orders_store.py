@@ -63,6 +63,16 @@ def fetch_orders_by_engineer(email: str) -> list[dict]:
     return [o for o in all_orders if o.get("EngineerEmail", "").lower().strip() == email_lower]
 
 
+def fetch_orders_for_user(email: str, name: str) -> list[dict]:
+    """Get orders where user is engineer OR reviewer."""
+    all_orders = fetch_all_orders()
+    email_lower = email.lower().strip()
+    name_lower = name.lower().strip()
+    return [o for o in all_orders
+            if o.get("EngineerEmail", "").lower().strip() == email_lower
+            or o.get("Reviewer", "").lower().strip() == name_lower]
+
+
 def fetch_order_by_id(order_id: str) -> dict | None:
     """Find a single order by OrderID."""
     for o in fetch_all_orders():
@@ -128,6 +138,10 @@ def create_order(client: gspread.Client, order_data: dict) -> str:
         order_data.get("drive_file_link", ""),           # DriveFileLink
         checklist_json,                                 # ChecklistJSON
         order.test_by_engineer,                         # TestByEngineer
+        "",                                             # BareBoardCostCNY
+        "",                                             # BOMCostCNY
+        "",                                             # SMTCostCNY
+        order_data.get("reviewer", ""),                  # Reviewer
     ]
 
     ws = _get_orders_worksheet(client)
