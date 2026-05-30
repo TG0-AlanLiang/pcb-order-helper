@@ -208,10 +208,13 @@ for order in filtered:
         if updates_pending or checklist_changed:
             with btn_col1:
                 if st.button("💾 Save Changes", key=f"save_{order_id}", type="primary"):
-                    if client and updates_pending:
-                        update_order(client, order_id, updates_pending)
-                    if client and checklist_changed:
-                        update_checklist(client, order_id, checklist)
+                    if client:
+                        # Merge field edits + checklist into ONE batched write
+                        save_payload = dict(updates_pending)
+                        if checklist_changed:
+                            save_payload["ChecklistJSON"] = json.dumps(checklist, ensure_ascii=False)
+                        if save_payload:
+                            update_order(client, order_id, save_payload)
                     st.success("Saved!")
                     st.rerun()
 

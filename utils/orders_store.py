@@ -8,6 +8,7 @@ from typing import Optional
 
 import gspread
 import streamlit as st
+from gspread.utils import rowcol_to_a1
 
 from config import GOOGLE_SHEET_ID, TAB_ORDERS, ORDERS_HEADERS
 from utils.models import Order, generate_checklist
@@ -159,7 +160,7 @@ def update_order(client: gspread.Client, order_id: str, updates: dict):
         updates: dict of {column_header: new_value}
     """
     ws = _get_orders_worksheet(client)
-    all_values = ws.get_all_values()
+    all_values = ws.get_all_values()       # 1 round trip: headers + find row
     if len(all_values) < 2:
         return
 
@@ -168,10 +169,17 @@ def update_order(client: gspread.Client, order_id: str, updates: dict):
     # Find the row with matching OrderID
     for row_idx, row in enumerate(all_values[1:], start=2):  # 1-indexed, skip header
         if row[0] == order_id:
+            # Build all cell writes, then send in ONE batch_update call
+            data = []
             for col_name, value in updates.items():
                 if col_name in headers:
                     col_idx = headers.index(col_name) + 1  # 1-indexed
-                    ws.update_cell(row_idx, col_idx, value)
+                    data.append({
+                        "range": rowcol_to_a1(row_idx, col_idx),
+                        "values": [[value]],
+                    })
+            if data:
+                ws.batch_update(data, value_input_option="USER_ENTERED")  # 1 round trip
             _clear_cache()
             return
 

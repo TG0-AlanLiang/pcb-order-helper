@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from utils.auth import require_auth
 from utils.google_client import get_gspread_client
-from utils.sheet_handler import fetch_pcb_delivery, update_delivery_cell, fetch_all_components, update_component_cell
+from utils.sheet_handler import fetch_pcb_delivery, update_delivery_cell, fetch_all_components, update_component_cells
 
 
 def _get(d: dict, key: str, default: str = "") -> str:
@@ -206,17 +206,15 @@ with st.expander(f"🔄 **Component Tracking** ({len(actionable_components)})", 
 
                 if st.button("💾 Save", key=f"csave_{cid}_{idx}", type="primary"):
                     try:
-                        changes = 0
+                        changed = {}
                         if new_status != status:
-                            update_component_cell(client, int(cid), "Status", new_status)
-                            changes += 1
+                            changed["Status"] = new_status
                         if new_source != source:
-                            update_component_cell(client, int(cid), "Component cource", new_source)
-                            changes += 1
+                            changed["Component cource"] = new_source
                         if new_notes != notes:
-                            update_component_cell(client, int(cid), "Notes", new_notes)
-                            changes += 1
-                        if changes:
+                            changed["Notes"] = new_notes
+                        if changed:
+                            update_component_cells(client, int(cid), changed)  # one batch write
                             st.success(f"#{cid} updated!")
                             st.rerun()
                         else:
