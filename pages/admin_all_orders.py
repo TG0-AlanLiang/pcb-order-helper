@@ -196,14 +196,13 @@ for order in filtered:
         else:
             st.caption("No messages.")
 
-        with st.form(f"msgform_{order_id}"):
+        with st.form(f"msgform_{order_id}", clear_on_submit=True):
             new_msg = st.text_input("Message", key=f"msg_{order_id}",
                                     placeholder="Ask engineer or leave note...",
                                     label_visibility="collapsed")
             sent = st.form_submit_button("Send")
         if sent and new_msg.strip() and client:
             send_message(client, order_id, user["name"], new_msg.strip())
-            st.session_state.pop(f"msg_{order_id}", None)
             st.rerun()
 
         # --- Status action buttons (single-click, outside forms) ---

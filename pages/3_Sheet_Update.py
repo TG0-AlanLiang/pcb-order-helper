@@ -95,6 +95,7 @@ with st.form("delivery_form"):
     preview_df = pd.DataFrame([delivery_row], columns=[
         "Number", "Order Date", "Priority", "PCB Name", "Vendor Order #",
         "Photo", "Recipient", "Jimmy Received", "Jimmy Ship Remark", "ETA (UK)",
+        "Register",
     ])
     st.dataframe(preview_df, width="stretch")
 
