@@ -35,8 +35,8 @@ if not client:
 # ============================================================
 # FETCH DATA
 # ============================================================
-deliveries = fetch_pcb_delivery(client)
-components = fetch_all_components(client)
+deliveries = fetch_pcb_delivery()
+components = fetch_all_components()
 
 # --- PCB Delivery categories ---
 pending_receipt = [d for d in deliveries if not _get(d, "Jimmy received check")]
@@ -121,32 +121,36 @@ with st.expander(f"📤 **Ready to Ship** ({len(ready_to_ship)})", expanded=Fals
             priority_icon = "🔴" if priority == "URGENT" else "🟢"
 
             st.markdown(f"{priority_icon} **#{num}** — {pcb} | Received: {received} | To: {recipient}")
-            remark = st.text_area(
-                "Shipping remark",
-                key=f"logship_remark_{num}_{i}",
-                placeholder="e.g. SF1562763341561\n5 to 杭州临平区\nThe rest to UK Shaoze",
-                height=80,
-            )
-            btn1, btn2 = st.columns(2)
-            with btn1:
-                if st.button("📦 Mark Shipped", key=f"logship_btn_{num}_{i}", type="primary"):
-                    if remark.strip():
-                        try:
-                            update_delivery_cell(client, int(num), "Jimmy Shipp out remark", remark.strip())
-                            st.success(f"#{num} shipped!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Failed: {e}")
-                    else:
-                        st.warning("Enter shipping remark first.")
-            with btn2:
-                if st.button("📥 Keep in Stock", key=f"logstock_btn_{num}_{i}"):
+            with st.form(f"shipform_{num}_{i}"):
+                remark = st.text_area(
+                    "Shipping remark",
+                    key=f"logship_remark_{num}_{i}",
+                    placeholder="e.g. SF1562763341561\n5 to 杭州临平区\nThe rest to UK Shaoze",
+                    height=80,
+                )
+                bc1, bc2 = st.columns(2)
+                with bc1:
+                    do_ship = st.form_submit_button("📦 Mark Shipped", type="primary")
+                with bc2:
+                    do_stock = st.form_submit_button("📥 Keep in Stock")
+
+            if do_ship:
+                if remark.strip():
                     try:
-                        update_delivery_cell(client, int(num), "Jimmy Shipp out remark", "入库存 Keep in stock")
-                        st.success(f"#{num} stocked!")
+                        update_delivery_cell(client, int(num), "Jimmy Shipp out remark", remark.strip())
+                        st.success(f"#{num} shipped!")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Failed: {e}")
+                else:
+                    st.warning("Enter shipping remark first.")
+            elif do_stock:
+                try:
+                    update_delivery_cell(client, int(num), "Jimmy Shipp out remark", "入库存 Keep in stock")
+                    st.success(f"#{num} stocked!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed: {e}")
             st.divider()
 
 # ============================================================
@@ -161,7 +165,19 @@ with st.expander(f"🔄 **Component Tracking** ({len(actionable_components)})", 
         ALL_STATUSES = ["To Order", "Ordered", "In Transit", "Recieved", "DeliveredToVendor", "From Stock", "Cancelled"]
         SOURCES = ["", "From Stock", "From UK", "From JLC", "To Order"]
 
-        for idx, c in enumerate(actionable_components):
+        # Cap how many are rendered at once (each item builds several widgets per rerun)
+        MAX_SHOW = 15
+        total_actionable = len(actionable_components)
+        if total_actionable > MAX_SHOW:
+            show_all = st.checkbox(
+                f"Show all {total_actionable} (showing first {MAX_SHOW})",
+                key="comp_show_all",
+            )
+            display_components = actionable_components if show_all else actionable_components[:MAX_SHOW]
+        else:
+            display_components = actionable_components
+
+        for idx, c in enumerate(display_components):
             cid = c.get("ID", "?")
             pcb = (c.get("PCB Name", "") or "").strip() or "N/A"
             mpn = (c.get("MPN", "") or "").strip() or "N/A"
@@ -193,18 +209,20 @@ with st.expander(f"🔄 **Component Tracking** ({len(actionable_components)})", 
                         st.markdown(f"**Registered by:** {registor}")
 
                 st.markdown("---")
-                ec1, ec2, ec3 = st.columns(3)
-                with ec1:
-                    cur_idx = ALL_STATUSES.index(status) if status in ALL_STATUSES else 0
-                    new_status = st.selectbox("Status", ALL_STATUSES, index=cur_idx, key=f"cs_{cid}_{idx}")
-                with ec2:
-                    src_idx = SOURCES.index(source) if source in SOURCES else 0
-                    new_source = st.selectbox("Source", SOURCES, index=src_idx, key=f"csrc_{cid}_{idx}")
-                with ec3:
-                    new_notes = st.text_input("Notes (tracking# / storage)", value=notes, key=f"cn_{cid}_{idx}",
-                                              placeholder="SF1558225393176 or keep in 储物箱")
+                with st.form(f"compform_{cid}_{idx}"):
+                    ec1, ec2, ec3 = st.columns(3)
+                    with ec1:
+                        cur_idx = ALL_STATUSES.index(status) if status in ALL_STATUSES else 0
+                        new_status = st.selectbox("Status", ALL_STATUSES, index=cur_idx, key=f"cs_{cid}_{idx}")
+                    with ec2:
+                        src_idx = SOURCES.index(source) if source in SOURCES else 0
+                        new_source = st.selectbox("Source", SOURCES, index=src_idx, key=f"csrc_{cid}_{idx}")
+                    with ec3:
+                        new_notes = st.text_input("Notes (tracking# / storage)", value=notes, key=f"cn_{cid}_{idx}",
+                                                  placeholder="SF1558225393176 or keep in 储物箱")
+                    do_save = st.form_submit_button("💾 Save", type="primary")
 
-                if st.button("💾 Save", key=f"csave_{cid}_{idx}", type="primary"):
+                if do_save:
                     try:
                         changed = {}
                         if new_status != status:

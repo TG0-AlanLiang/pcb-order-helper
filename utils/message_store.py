@@ -56,10 +56,7 @@ def send_message(client: gspread.Client, order_id: str, author: str, content: st
     ws = _get_messages_worksheet(client)
     msg_id = str(uuid.uuid4())[:8]
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    col_a = ws.col_values(1)
-    next_row = len(col_a) + 1
-    ws.update(
-        values=[[msg_id, order_id, now, author, content]],
-        range_name=f"A{next_row}:E{next_row}",
-    )
+    # append_row appends after the last data row in one API round trip
+    ws.append_row([msg_id, order_id, now, author, content],
+                  value_input_option="USER_ENTERED")
     _fetch_messages_cached.clear()

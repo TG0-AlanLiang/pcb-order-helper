@@ -19,7 +19,7 @@ if not client:
     st.error("Cannot connect to Google Sheets.")
     st.stop()
 
-components = fetch_all_components(client)
+components = fetch_all_components()
 
 # Filter by current user's name (Point of contact column)
 my_components = [

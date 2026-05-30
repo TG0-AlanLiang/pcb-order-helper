@@ -156,12 +156,14 @@ for order in orders:
         else:
             st.caption("No messages yet.")
 
-        new_msg = st.text_input("Type a message...", key=f"msg_input_{order_id}",
-                                placeholder="Ask a question or leave a note")
-        if st.button("Send", key=f"msg_send_{order_id}"):
-            if new_msg.strip() and client:
-                send_message(client, order_id, user["name"], new_msg.strip())
-                st.rerun()
+        with st.form(f"msgform_{order_id}"):
+            new_msg = st.text_input("Type a message...", key=f"msg_input_{order_id}",
+                                    placeholder="Ask a question or leave a note")
+            sent = st.form_submit_button("Send")
+        if sent and new_msg.strip() and client:
+            send_message(client, order_id, user["name"], new_msg.strip())
+            st.session_state.pop(f"msg_input_{order_id}", None)
+            st.rerun()
 
         # --- Reorder button ---
         st.markdown("---")

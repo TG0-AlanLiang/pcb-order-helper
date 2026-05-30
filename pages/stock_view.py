@@ -6,24 +6,15 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from utils.auth import require_auth
-from utils.google_client import get_gspread_client
-from utils.sheet_handler import fetch_stock_data
+from utils.sheet_handler import fetch_stock_values
 
 
 user = require_auth()
 
 st.title("📦 Stock Inventory")
 
-client = get_gspread_client()
-if not client:
-    st.error("Cannot connect to Google Sheets.")
-    st.stop()
-
-# Fetch raw data for better column control
-from config import GOOGLE_SHEET_ID
-ss = client.open_by_key(GOOGLE_SHEET_ID)
-ws = ss.worksheet("Stock")
-all_values = ws.get_all_values()
+# Cached fetch (2 min) — no direct API call per page load
+all_values = fetch_stock_values()
 
 if len(all_values) < 2:
     st.info("No stock data found.")

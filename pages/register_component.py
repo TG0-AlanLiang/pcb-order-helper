@@ -93,7 +93,7 @@ if submitted:
 
         # Auto-add MPN to Stock tab if not already there
         try:
-            stock_data = fetch_stock_data(client)
+            stock_data = fetch_stock_data()
             existing_mpns = set()
             for s in stock_data:
                 stock_mpn = str(s.get("Component MPN", "") or s.get(list(s.keys())[0] if s else "", "")).strip()

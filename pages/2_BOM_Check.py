@@ -65,7 +65,7 @@ if bom_file:
     if client:
         try:
             with st.spinner("Fetching stock data from Google Sheet..."):
-                stock_data = fetch_stock_data(client)
+                stock_data = fetch_stock_data()
             st.success(f"Loaded {len(stock_data)} stock entries from Google Sheet")
         except Exception as e:
             st.warning(f"Could not fetch stock data: {e}")

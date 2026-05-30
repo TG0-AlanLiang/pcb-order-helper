@@ -32,6 +32,7 @@ def _invalidate_components_cache():
 
 def _invalidate_stock_cache():
     fetch_stock_data.clear()
+    fetch_stock_values.clear()
 
 
 # --- Stock operations ---
@@ -46,6 +47,22 @@ def fetch_stock_data(_client_id: str = "") -> list[dict]:
     sheet = get_spreadsheet(client)
     ws = sheet.worksheet(TAB_STOCK)
     return ws.get_all_records()
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_stock_values(_client_id: str = "") -> list[list]:
+    """Raw 2D values of the Stock tab (headers + rows). Cached 2 minutes.
+
+    Used by the Stock page, which needs raw values (Stock tab has duplicate /
+    blank header cells that break get_all_records()).
+    """
+    from utils.google_client import get_gspread_client
+    client = get_gspread_client()
+    if not client:
+        return []
+    sheet = get_spreadsheet(client)
+    ws = sheet.worksheet(TAB_STOCK)
+    return ws.get_all_values()
 
 
 def add_stock_entry(client: gspread.Client, mpn: str, specs: str = "",
@@ -99,7 +116,7 @@ def fetch_all_components(_client=None) -> list[dict]:
 
 def get_next_component_id(client: gspread.Client) -> int:
     """Get the next available ID for AllComponents."""
-    records = fetch_all_components(client)
+    records = fetch_all_components()
     if not records:
         return 1
     max_id = 0
@@ -213,7 +230,7 @@ def fetch_pcb_delivery(_client=None) -> list[dict]:
 
 def get_next_delivery_number(client: gspread.Client) -> int:
     """Get the next available Number for PCB Delivery."""
-    records = fetch_pcb_delivery(client)
+    records = fetch_pcb_delivery()
     if not records:
         return 1
     max_num = 0

@@ -346,12 +346,11 @@ if messages:
 else:
     st.caption("No messages yet.")
 
-mc1, mc2 = st.columns([4, 1])
-with mc1:
+with st.form("proc_msgform"):
     new_msg = st.text_input("Message", key="proc_msg_input", placeholder="Ask engineer or leave a note...",
                             label_visibility="collapsed")
-with mc2:
-    if st.button("Send", key="proc_msg_send"):
-        if new_msg.strip() and client:
-            send_message(client, order_id, user["name"], new_msg.strip())
-            st.rerun()
+    sent = st.form_submit_button("Send")
+if sent and new_msg.strip() and client:
+    send_message(client, order_id, user["name"], new_msg.strip())
+    st.session_state.pop("proc_msg_input", None)
+    st.rerun()

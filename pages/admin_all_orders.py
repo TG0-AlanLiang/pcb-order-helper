@@ -6,7 +6,7 @@ import streamlit as st
 
 from utils.auth import require_role
 from utils.google_client import get_gspread_client
-from utils.orders_store import fetch_all_orders, update_order, update_checklist
+from utils.orders_store import fetch_all_orders, update_order
 from utils.sheet_handler import get_next_delivery_number, add_delivery_row
 from utils.message_store import fetch_messages_for_order, send_message
 from config import ORDER_STATUSES, STATUS_COLORS, CNY_TO_GBP
@@ -100,8 +100,8 @@ for order in filtered:
     )
 
     with st.expander(header, expanded=False):
-        # Info row
-        info1, info2, info3 = st.columns(3)
+        # Info row (display only)
+        info1, info2 = st.columns(2)
         with info1:
             st.markdown(f"**ID:** `{order_id}`")
             st.markdown(f"**Engineer:** {engineer}")
@@ -115,26 +115,13 @@ for order in filtered:
             st.markdown(f"**Thickness:** {order.get('Thickness', 'N/A')}")
             st.markdown(f"**Solder Mask:** {order.get('SolderMask', 'N/A')}")
             st.markdown(f"**Needs SMT:** {'Yes' if needs_smt else 'No'}")
-        with info3:
-            # Editable fields
-            new_smt = st.text_input("SMT Route", value=order.get("SMTRoute", ""), key=f"smt_{order_id}")
-            new_vendor = st.text_input("Vendor Order #", value=order.get("VendorOrderNum", ""), key=f"vendor_{order_id}")
-
-            # ETA date picker
-            current_eta = order.get("ETA", "")
-            try:
-                eta_date = datetime.strptime(current_eta, "%Y-%m-%d").date() if current_eta else None
-            except ValueError:
-                eta_date = None
-            new_eta_date = st.date_input("ETA", value=eta_date, key=f"eta_{order_id}")
-            new_eta = new_eta_date.strftime("%Y-%m-%d") if new_eta_date else ""
 
         # File link
         drive_link = order.get("DriveFileLink", "")
         if drive_link:
             st.markdown(f"📁 [View files on Drive]({drive_link})")
 
-        # Cost display (admin only sees this page)
+        # Cost display
         def _to_f(v):
             try: return float(str(v).strip()) if str(v).strip() else 0.0
             except (ValueError, TypeError): return 0.0
@@ -146,35 +133,55 @@ for order in filtered:
             total_gbp = total_cny * CNY_TO_GBP
             st.markdown(f"💰 **Cost:** Bare ¥{bare_c:.0f} + BOM ¥{bom_c:.0f} + SMT ¥{smt_c:.0f} = **¥{total_cny:,.2f} CNY (£{total_gbp:,.2f} GBP)**")
 
-        # Progress bar
         st.progress(pct)
 
-        # Checklist
-        st.markdown("**Checklist:**")
-        checklist_changed = False
-        for j, item in enumerate(checklist):
-            new_val = st.checkbox(
-                item.get("text", ""),
-                value=item.get("done", False),
-                key=f"chk_{order_id}_{item.get('id', j)}",
-            )
-            if new_val != item.get("done", False):
-                item["done"] = new_val
-                checklist_changed = True
+        # --- Edit form (no rerun until Save) ---
+        current_eta = order.get("ETA", "")
+        try:
+            eta_default = datetime.strptime(current_eta, "%Y-%m-%d").date() if current_eta else None
+        except ValueError:
+            eta_default = None
 
-        # Notes
-        new_notes = st.text_area("Notes", value=order.get("Notes", ""), key=f"notes_{order_id}", height=200)
+        with st.form(f"editform_{order_id}"):
+            ef1, ef2 = st.columns(2)
+            with ef1:
+                new_smt = st.text_input("SMT Route", value=order.get("SMTRoute", ""), key=f"smt_{order_id}")
+                new_vendor = st.text_input("Vendor Order #", value=order.get("VendorOrderNum", ""), key=f"vendor_{order_id}")
+                new_eta_date = st.date_input("ETA", value=eta_default, key=f"eta_{order_id}")
+            with ef2:
+                st.markdown("**Checklist:**")
+                new_done = []
+                for j, item in enumerate(checklist):
+                    new_done.append(st.checkbox(
+                        item.get("text", ""),
+                        value=item.get("done", False),
+                        key=f"chk_{order_id}_{item.get('id', j)}",
+                    ))
+            new_notes = st.text_area("Notes", value=order.get("Notes", ""), key=f"notes_{order_id}", height=160)
+            saved = st.form_submit_button("💾 Save Changes", type="primary")
 
-        # Save changes button
-        updates_pending = {}
-        if new_smt != order.get("SMTRoute", ""):
-            updates_pending["SMTRoute"] = new_smt
-        if new_vendor != order.get("VendorOrderNum", ""):
-            updates_pending["VendorOrderNum"] = new_vendor
-        if new_eta != current_eta:
-            updates_pending["ETA"] = new_eta
-        if new_notes != order.get("Notes", ""):
-            updates_pending["Notes"] = new_notes
+        if saved and client:
+            new_eta = new_eta_date.strftime("%Y-%m-%d") if new_eta_date else ""
+            payload = {}
+            if new_smt != order.get("SMTRoute", ""):
+                payload["SMTRoute"] = new_smt
+            if new_vendor != order.get("VendorOrderNum", ""):
+                payload["VendorOrderNum"] = new_vendor
+            if new_eta != current_eta:
+                payload["ETA"] = new_eta
+            if new_notes != order.get("Notes", ""):
+                payload["Notes"] = new_notes
+            cl_changed = False
+            for item, v in zip(checklist, new_done):
+                if v != item.get("done", False):
+                    item["done"] = v
+                    cl_changed = True
+            if cl_changed:
+                payload["ChecklistJSON"] = json.dumps(checklist, ensure_ascii=False)
+            if payload:
+                update_order(client, order_id, payload)
+                st.success("Saved!")
+            st.rerun()
 
         # --- Messages ---
         st.markdown("**💬 Messages:**")
@@ -184,41 +191,25 @@ for order in filtered:
                 author = m.get("Author", "")
                 ts = m.get("Timestamp", "")
                 content = m.get("Content", "")
-                is_me = author == user["name"]
-                prefix = "🟢" if is_me else "🔵"
+                prefix = "🟢" if author == user["name"] else "🔵"
                 st.markdown(f"{prefix} **{author}** ({ts}): {content}")
         else:
             st.caption("No messages.")
 
-        mc1, mc2 = st.columns([4, 1])
-        with mc1:
-            new_msg = st.text_input("Message", key=f"msg_{order_id}", placeholder="Ask engineer or leave note...",
+        with st.form(f"msgform_{order_id}"):
+            new_msg = st.text_input("Message", key=f"msg_{order_id}",
+                                    placeholder="Ask engineer or leave note...",
                                     label_visibility="collapsed")
-        with mc2:
-            if st.button("Send", key=f"msgsend_{order_id}"):
-                if new_msg.strip() and client:
-                    send_message(client, order_id, user["name"], new_msg.strip())
-                    st.rerun()
+            sent = st.form_submit_button("Send")
+        if sent and new_msg.strip() and client:
+            send_message(client, order_id, user["name"], new_msg.strip())
+            st.session_state.pop(f"msg_{order_id}", None)
+            st.rerun()
 
-        # --- Action buttons ---
+        # --- Status action buttons (single-click, outside forms) ---
         st.markdown("**Actions:**")
-        btn_col1, btn_col2, btn_col3 = st.columns(3)
+        btn_col2, btn_col3 = st.columns(2)
 
-        # Save button (always available if changes pending)
-        if updates_pending or checklist_changed:
-            with btn_col1:
-                if st.button("💾 Save Changes", key=f"save_{order_id}", type="primary"):
-                    if client:
-                        # Merge field edits + checklist into ONE batched write
-                        save_payload = dict(updates_pending)
-                        if checklist_changed:
-                            save_payload["ChecklistJSON"] = json.dumps(checklist, ensure_ascii=False)
-                        if save_payload:
-                            update_order(client, order_id, save_payload)
-                    st.success("Saved!")
-                    st.rerun()
-
-        # Context-aware status buttons
         STATUS_ACTIONS = {
             "new": ("🔧 Start Processing", "processing"),
             "processing": ("📦 Mark as Ordered", "ordered"),
@@ -233,30 +224,20 @@ for order in filtered:
                     if client:
                         update_order(client, order_id, {"Status": next_status})
 
-                        # Auto-write PCB Delivery when marking as ordered
+                        # Auto-write PCB Delivery when marking as ordered (uses SAVED values)
                         if next_status == "ordered":
                             try:
                                 next_num = get_next_delivery_number(client)
                                 order_date = created.split(" ")[0] if created else datetime.now().strftime("%Y-%m-%d")
-                                # Build vendor order field: order# + SMT route if applicable
-                                vendor_num = new_vendor or order.get("VendorOrderNum", "")
-                                smt_route = new_smt or order.get("SMTRoute", "")
+                                vendor_num = order.get("VendorOrderNum", "")
+                                smt_route = order.get("SMTRoute", "")
                                 if needs_smt and smt_route:
                                     vendor_display = f"{vendor_num}; {smt_route}" if vendor_num else smt_route
                                 else:
                                     vendor_display = vendor_num
-
                                 delivery_row = [
-                                    next_num,
-                                    order_date,
-                                    priority,
-                                    pcb_name,
-                                    vendor_display,
-                                    "",  # Photo - skip
-                                    order.get("Recipient", ""),
-                                    "",  # Jimmy received
-                                    "",  # Jimmy ship remark
-                                    new_eta or current_eta,
+                                    next_num, order_date, priority, pcb_name, vendor_display,
+                                    "", order.get("Recipient", ""), "", "", order.get("ETA", ""),
                                     engineer,  # Register (engineer name)
                                 ]
                                 add_delivery_row(client, delivery_row)
@@ -266,7 +247,6 @@ for order in filtered:
 
                         st.rerun()
 
-        # Revert button (only if not new)
         if status != "new":
             status_idx = ORDER_STATUSES.index(status) if status in ORDER_STATUSES else 0
             prev_status = ORDER_STATUSES[status_idx - 1]
