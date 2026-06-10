@@ -13,11 +13,13 @@ from config import (
     TAB_PCB_DELIVERY,
     TAB_STOCK,
 )
+from utils.google_client import with_worksheet
 
 
 def get_spreadsheet(client: gspread.Client) -> gspread.Spreadsheet:
-    """Open the PCB tracking spreadsheet."""
-    return client.open_by_key(GOOGLE_SHEET_ID)
+    """Open the PCB tracking spreadsheet (prefer google_client.get_spreadsheet)."""
+    from utils.google_client import get_spreadsheet as _cached
+    return _cached()
 
 
 # --- Cache invalidation helpers ---
@@ -40,13 +42,8 @@ def _invalidate_stock_cache():
 @st.cache_data(ttl=120, show_spinner=False)
 def fetch_stock_data(_client_id: str = "") -> list[dict]:
     """Fetch all stock data from the Stock tab. Cached 2 minutes."""
-    from utils.google_client import get_gspread_client
-    client = get_gspread_client()
-    if not client:
-        return []
-    sheet = get_spreadsheet(client)
-    ws = sheet.worksheet(TAB_STOCK)
-    return ws.get_all_records()
+    result = with_worksheet(TAB_STOCK, lambda ws: ws.get_all_records())
+    return result if result is not None else []
 
 
 @st.cache_data(ttl=120, show_spinner=False)
@@ -56,13 +53,8 @@ def fetch_stock_values(_client_id: str = "") -> list[list]:
     Used by the Stock page, which needs raw values (Stock tab has duplicate /
     blank header cells that break get_all_records()).
     """
-    from utils.google_client import get_gspread_client
-    client = get_gspread_client()
-    if not client:
-        return []
-    sheet = get_spreadsheet(client)
-    ws = sheet.worksheet(TAB_STOCK)
-    return ws.get_all_values()
+    result = with_worksheet(TAB_STOCK, lambda ws: ws.get_all_values())
+    return result if result is not None else []
 
 
 def add_stock_entry(client: gspread.Client, mpn: str, specs: str = "",
@@ -72,19 +64,20 @@ def add_stock_entry(client: gspread.Client, mpn: str, specs: str = "",
     Only writes to unprotected columns (A, B, F, G, H) to avoid
     hitting protected columns C:D.
     """
-    sheet = get_spreadsheet(client)
-    ws = sheet.worksheet(TAB_STOCK)
-    # Find next empty row in column A
-    col_a = ws.col_values(1)
-    next_row = len(col_a) + 1
-    # Write only to unprotected cells individually
-    ws.update_cell(next_row, 1, mpn)       # A: Component MPN
-    ws.update_cell(next_row, 2, specs)     # B: Specs
-    # Skip C, D (protected)
-    # Skip E (stock check formula)
-    # F: Current Stock - skip (formula)
-    ws.update_cell(next_row, 7, project)   # G: Project
-    ws.update_cell(next_row, 8, note)      # H: Note
+    def _do(ws: gspread.Worksheet):
+        # Find next empty row in column A
+        col_a = ws.col_values(1)
+        next_row = len(col_a) + 1
+        # Write only to unprotected cells individually
+        ws.update_cell(next_row, 1, mpn)       # A: Component MPN
+        ws.update_cell(next_row, 2, specs)     # B: Specs
+        # Skip C, D (protected)
+        # Skip E (stock check formula)
+        # F: Current Stock - skip (formula)
+        ws.update_cell(next_row, 7, project)   # G: Project
+        ws.update_cell(next_row, 8, note)      # H: Note
+
+    with_worksheet(TAB_STOCK, _do)
     _invalidate_stock_cache()
 
 
@@ -93,14 +86,8 @@ def add_stock_entry(client: gspread.Client, mpn: str, specs: str = "",
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_all_components(_client=None) -> list[dict]:
     """Fetch all records from AllComponents tab. Cached 60s."""
-    from utils.google_client import get_gspread_client
-    client = get_gspread_client()
-    if not client:
-        return []
-    sheet = get_spreadsheet(client)
-    ws = sheet.worksheet(TAB_ALL_COMPONENTS)
-    all_values = ws.get_all_values()
-    if len(all_values) < 3:
+    all_values = with_worksheet(TAB_ALL_COMPONENTS, lambda ws: ws.get_all_values())
+    if not all_values or len(all_values) < 3:
         return []
     headers = all_values[1]  # Row 2 is headers
     data = all_values[2:]    # Row 3+ is data
@@ -145,42 +132,43 @@ def update_component_cells(client: gspread.Client, component_id: int,
     if not updates:
         return
 
-    sheet = get_spreadsheet(client)
-    ws = sheet.worksheet(TAB_ALL_COMPONENTS)
-    all_values = ws.get_all_values()       # 1 round trip: headers + find row
-    if len(all_values) < 3:
-        raise ValueError("AllComponents tab has no data")
+    def _do(ws: gspread.Worksheet):
+        all_values = ws.get_all_values()       # 1 round trip: headers + find row
+        if len(all_values) < 3:
+            raise ValueError("AllComponents tab has no data")
 
-    headers = all_values[1]  # Row 2 is headers
+        headers = all_values[1]  # Row 2 is headers
 
-    # Resolve each column name to a 1-indexed column number
-    def _resolve_col(name: str):
-        for i, h in enumerate(headers):
-            if h.strip().startswith(name) or name in h:
-                return i + 1
-        return None
+        # Resolve each column name to a 1-indexed column number
+        def _resolve_col(name: str):
+            for i, h in enumerate(headers):
+                if h.strip().startswith(name) or name in h:
+                    return i + 1
+            return None
 
-    col_map = {name: _resolve_col(name) for name in updates}
-    missing = [n for n, c in col_map.items() if c is None]
-    if missing:
-        raise ValueError(f"Columns not found: {missing}")
+        col_map = {name: _resolve_col(name) for name in updates}
+        missing = [n for n, c in col_map.items() if c is None]
+        if missing:
+            raise ValueError(f"Columns not found: {missing}")
 
-    # Find row by ID (column A, data starts at row 3)
-    for row_idx, row in enumerate(all_values[2:], start=3):
-        try:
-            if int(row[0]) == component_id:
-                data = [
-                    {"range": rowcol_to_a1(row_idx, col_map[name]),
-                     "values": [[value]]}
-                    for name, value in updates.items()
-                ]
-                ws.batch_update(data, value_input_option="USER_ENTERED")  # 1 round trip
-                _invalidate_components_cache()
-                return
-        except (ValueError, IndexError):
-            continue
+        # Find row by ID (column A, data starts at row 3)
+        for row_idx, row in enumerate(all_values[2:], start=3):
+            try:
+                if int(row[0]) == component_id:
+                    data = [
+                        {"range": rowcol_to_a1(row_idx, col_map[name]),
+                         "values": [[value]]}
+                        for name, value in updates.items()
+                    ]
+                    ws.batch_update(data, value_input_option="USER_ENTERED")  # 1 round trip
+                    _invalidate_components_cache()
+                    return
+            except (ValueError, IndexError):
+                continue
 
-    raise ValueError(f"Component ID {component_id} not found")
+        raise ValueError(f"Component ID {component_id} not found")
+
+    with_worksheet(TAB_ALL_COMPONENTS, _do)
 
 
 def update_component_cell(client: gspread.Client, component_id: int,
@@ -195,10 +183,11 @@ def add_component_rows(client: gspread.Client, rows: list[list]):
     AllComponents has row 1 = role labels, row 2 = headers, data from row 3.
     Records are in descending order, so new rows go to row 3.
     """
-    sheet = get_spreadsheet(client)
-    ws = sheet.worksheet(TAB_ALL_COMPONENTS)
-    for row in rows:
-        ws.insert_row(row, index=3, value_input_option="USER_ENTERED")
+    def _do(ws: gspread.Worksheet):
+        for row in rows:
+            ws.insert_row(row, index=3, value_input_option="USER_ENTERED")
+
+    with_worksheet(TAB_ALL_COMPONENTS, _do)
     _invalidate_components_cache()
 
 
@@ -207,14 +196,8 @@ def add_component_rows(client: gspread.Client, rows: list[list]):
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_pcb_delivery(_client=None) -> list[dict]:
     """Fetch all records from PCB Delivery tab. Cached 60s."""
-    from utils.google_client import get_gspread_client
-    client = get_gspread_client()
-    if not client:
-        return []
-    sheet = get_spreadsheet(client)
-    ws = sheet.worksheet(TAB_PCB_DELIVERY)
-    all_values = ws.get_all_values()
-    if len(all_values) < 2:
+    all_values = with_worksheet(TAB_PCB_DELIVERY, lambda ws: ws.get_all_values())
+    if not all_values or len(all_values) < 2:
         return []
     headers = all_values[0]
     data = all_values[1:]
@@ -249,9 +232,8 @@ def add_delivery_row(client: gspread.Client, row: list):
     PCB Delivery has row 1 = headers, data from row 2.
     Records are in descending order, so new rows go to row 2.
     """
-    sheet = get_spreadsheet(client)
-    ws = sheet.worksheet(TAB_PCB_DELIVERY)
-    ws.insert_row(row, index=2, value_input_option="USER_ENTERED")
+    with_worksheet(TAB_PCB_DELIVERY,
+                   lambda ws: ws.insert_row(row, index=2, value_input_option="USER_ENTERED"))
     _invalidate_pcb_delivery_cache()
 
 
@@ -272,21 +254,20 @@ def update_delivery_cell(client: gspread.Client, delivery_number: int,
         raise ValueError(f"Unknown column: {column_name}")
     col_idx = ord(col_letter.upper()) - ord("A") + 1  # 1-indexed
 
-    sheet = get_spreadsheet(client)
-    ws = sheet.worksheet(TAB_PCB_DELIVERY)
-    all_values = ws.get_all_values()
+    def _do(ws: gspread.Worksheet):
+        all_values = ws.get_all_values()
+        # Find the row with matching Number (column A)
+        for row_idx, row in enumerate(all_values[1:], start=2):  # skip header
+            try:
+                if int(row[0]) == delivery_number:
+                    ws.update_cell(row_idx, col_idx, value)
+                    _invalidate_pcb_delivery_cache()
+                    return
+            except (ValueError, IndexError):
+                continue
+        raise ValueError(f"Delivery number {delivery_number} not found")
 
-    # Find the row with matching Number (column A)
-    for row_idx, row in enumerate(all_values[1:], start=2):  # skip header
-        try:
-            if int(row[0]) == delivery_number:
-                ws.update_cell(row_idx, col_idx, value)
-                _invalidate_pcb_delivery_cache()
-                return
-        except (ValueError, IndexError):
-            continue
-
-    raise ValueError(f"Delivery number {delivery_number} not found")
+    with_worksheet(TAB_PCB_DELIVERY, _do)
 
 
 def update_delivery_cells(client: gspread.Client, delivery_number: int,
@@ -312,22 +293,21 @@ def update_delivery_cells(client: gspread.Client, delivery_number: int,
             raise ValueError(f"Unknown delivery column: {name}")
         col_map[name] = ord(letter.upper()) - ord("A") + 1
 
-    sheet = get_spreadsheet(client)
-    ws = sheet.worksheet(TAB_PCB_DELIVERY)
-    all_values = ws.get_all_values()
+    def _do(ws: gspread.Worksheet):
+        all_values = ws.get_all_values()
+        for row_idx, row in enumerate(all_values[1:], start=2):  # skip header
+            try:
+                if int(row[0]) == delivery_number:
+                    data = [
+                        {"range": rowcol_to_a1(row_idx, col_map[name]),
+                         "values": [[value]]}
+                        for name, value in updates.items()
+                    ]
+                    ws.batch_update(data, value_input_option="USER_ENTERED")
+                    _invalidate_pcb_delivery_cache()
+                    return
+            except (ValueError, IndexError):
+                continue
+        raise ValueError(f"Delivery number {delivery_number} not found")
 
-    for row_idx, row in enumerate(all_values[1:], start=2):  # skip header
-        try:
-            if int(row[0]) == delivery_number:
-                data = [
-                    {"range": rowcol_to_a1(row_idx, col_map[name]),
-                     "values": [[value]]}
-                    for name, value in updates.items()
-                ]
-                ws.batch_update(data, value_input_option="USER_ENTERED")
-                _invalidate_pcb_delivery_cache()
-                return
-        except (ValueError, IndexError):
-            continue
-
-    raise ValueError(f"Delivery number {delivery_number} not found")
+    with_worksheet(TAB_PCB_DELIVERY, _do)

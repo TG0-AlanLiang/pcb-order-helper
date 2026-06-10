@@ -9,29 +9,25 @@ import gspread
 import streamlit as st
 
 from config import GOOGLE_SHEET_ID
+from utils.google_client import with_worksheet
 
 TAB_MESSAGES = "Messages"
 
 
-def _get_messages_worksheet(client: gspread.Client) -> gspread.Worksheet:
-    ss = client.open_by_key(GOOGLE_SHEET_ID)
-    try:
-        return ss.worksheet(TAB_MESSAGES)
-    except gspread.exceptions.WorksheetNotFound:
-        ws = ss.add_worksheet(title=TAB_MESSAGES, rows=2000, cols=5)
-        ws.update(values=[["MessageID", "OrderID", "Timestamp", "Author", "Content"]], range_name="A1:E1")
-        return ws
+def _create_messages_ws(ss: gspread.Spreadsheet) -> gspread.Worksheet:
+    ws = ss.add_worksheet(title=TAB_MESSAGES, rows=2000, cols=5)
+    ws.update(values=[["MessageID", "OrderID", "Timestamp", "Author", "Content"]], range_name="A1:E1")
+    return ws
+
+
+def _on_messages_ws(fn):
+    return with_worksheet(TAB_MESSAGES, fn, create=_create_messages_ws)
 
 
 @st.cache_data(ttl=30, show_spinner=False)
 def _fetch_messages_cached(_sheet_id: str) -> list[dict]:
-    from utils.google_client import get_gspread_client
-    client = get_gspread_client()
-    if not client:
-        return []
-    ws = _get_messages_worksheet(client)
-    all_values = ws.get_all_values()
-    if len(all_values) < 2:
+    all_values = _on_messages_ws(lambda ws: ws.get_all_values())
+    if not all_values or len(all_values) < 2:
         return []
     headers = all_values[0]
     return [
@@ -53,10 +49,9 @@ def fetch_unread_messages(user_name: str) -> list[dict]:
 
 
 def send_message(client: gspread.Client, order_id: str, author: str, content: str):
-    ws = _get_messages_worksheet(client)
     msg_id = str(uuid.uuid4())[:8]
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     # append_row appends after the last data row in one API round trip
-    ws.append_row([msg_id, order_id, now, author, content],
-                  value_input_option="USER_ENTERED")
+    _on_messages_ws(lambda ws: ws.append_row(
+        [msg_id, order_id, now, author, content], value_input_option="USER_ENTERED"))
     _fetch_messages_cached.clear()

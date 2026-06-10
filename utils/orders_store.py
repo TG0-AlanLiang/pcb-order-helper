@@ -11,18 +11,20 @@ import streamlit as st
 from gspread.utils import rowcol_to_a1
 
 from config import GOOGLE_SHEET_ID, TAB_ORDERS, ORDERS_HEADERS
+from utils.google_client import with_worksheet
 from utils.models import Order, generate_checklist
 
 
-def _get_orders_worksheet(client: gspread.Client) -> gspread.Worksheet:
-    """Get or create the Orders worksheet."""
-    ss = client.open_by_key(GOOGLE_SHEET_ID)
-    try:
-        return ss.worksheet(TAB_ORDERS)
-    except gspread.exceptions.WorksheetNotFound:
-        ws = ss.add_worksheet(title=TAB_ORDERS, rows=1000, cols=len(ORDERS_HEADERS))
-        ws.insert_row(ORDERS_HEADERS, index=1)
-        return ws
+def _create_orders_ws(ss: gspread.Spreadsheet) -> gspread.Worksheet:
+    """Create the Orders worksheet (auto-create when missing)."""
+    ws = ss.add_worksheet(title=TAB_ORDERS, rows=1000, cols=len(ORDERS_HEADERS))
+    ws.insert_row(ORDERS_HEADERS, index=1)
+    return ws
+
+
+def _on_orders_ws(fn):
+    """Run fn(ws) on the cached Orders worksheet handle."""
+    return with_worksheet(TAB_ORDERS, fn, create=_create_orders_ws)
 
 
 def _parse_rows(ws: gspread.Worksheet) -> list[dict]:
@@ -44,12 +46,8 @@ def _parse_rows(ws: gspread.Worksheet) -> list[dict]:
 @st.cache_data(ttl=60, show_spinner=False)
 def _fetch_all_orders_cached(_sheet_id: str, _tab: str) -> list[dict]:
     """Cached fetch - internal, do not call directly."""
-    from utils.google_client import get_gspread_client
-    client = get_gspread_client()
-    if not client:
-        return []
-    ws = _get_orders_worksheet(client)
-    return _parse_rows(ws)
+    result = _on_orders_ws(_parse_rows)
+    return result if result is not None else []
 
 
 def fetch_all_orders() -> list[dict]:
@@ -146,8 +144,7 @@ def create_order(client: gspread.Client, order_data: dict) -> str:
         "",                                             # DeliveryNumber
     ]
 
-    ws = _get_orders_worksheet(client)
-    ws.insert_row(row, index=2, value_input_option="USER_ENTERED")
+    _on_orders_ws(lambda ws: ws.insert_row(row, index=2, value_input_option="USER_ENTERED"))
     _clear_cache()
     return order_id
 
@@ -160,29 +157,31 @@ def update_order(client: gspread.Client, order_id: str, updates: dict):
         order_id: the OrderID to update
         updates: dict of {column_header: new_value}
     """
-    ws = _get_orders_worksheet(client)
-    all_values = ws.get_all_values()       # 1 round trip: headers + find row
-    if len(all_values) < 2:
-        return
-
-    headers = all_values[0]
-
-    # Find the row with matching OrderID
-    for row_idx, row in enumerate(all_values[1:], start=2):  # 1-indexed, skip header
-        if row[0] == order_id:
-            # Build all cell writes, then send in ONE batch_update call
-            data = []
-            for col_name, value in updates.items():
-                if col_name in headers:
-                    col_idx = headers.index(col_name) + 1  # 1-indexed
-                    data.append({
-                        "range": rowcol_to_a1(row_idx, col_idx),
-                        "values": [[value]],
-                    })
-            if data:
-                ws.batch_update(data, value_input_option="USER_ENTERED")  # 1 round trip
-            _clear_cache()
+    def _do(ws: gspread.Worksheet):
+        all_values = ws.get_all_values()       # 1 round trip: headers + find row
+        if len(all_values) < 2:
             return
+
+        headers = all_values[0]
+
+        # Find the row with matching OrderID
+        for row_idx, row in enumerate(all_values[1:], start=2):  # 1-indexed, skip header
+            if row[0] == order_id:
+                # Build all cell writes, then send in ONE batch_update call
+                data = []
+                for col_name, value in updates.items():
+                    if col_name in headers:
+                        col_idx = headers.index(col_name) + 1  # 1-indexed
+                        data.append({
+                            "range": rowcol_to_a1(row_idx, col_idx),
+                            "values": [[value]],
+                        })
+                if data:
+                    ws.batch_update(data, value_input_option="USER_ENTERED")  # 1 round trip
+                _clear_cache()
+                return
+
+    _on_orders_ws(_do)
 
 
 def update_checklist(client: gspread.Client, order_id: str, checklist: list[dict]):
