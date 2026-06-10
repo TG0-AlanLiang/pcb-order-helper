@@ -5,9 +5,8 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from utils.auth import require_auth, is_admin
-from utils.message_store import _fetch_messages_cached
+from utils.message_store import fetch_all_messages
 from utils.orders_store import fetch_all_orders, fetch_orders_by_engineer
-from config import GOOGLE_SHEET_ID
 
 
 user = require_auth()
@@ -24,7 +23,7 @@ my_order_ids = {o.get("OrderID") for o in orders}
 order_names = {o.get("OrderID"): o.get("PCBName", "Unknown") for o in orders}
 
 # Get all messages
-all_messages = _fetch_messages_cached(GOOGLE_SHEET_ID)
+all_messages = fetch_all_messages()
 
 # Filter to messages on my orders
 my_messages = [m for m in all_messages if m.get("OrderID") in my_order_ids]

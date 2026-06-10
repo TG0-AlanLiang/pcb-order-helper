@@ -7,12 +7,15 @@ from datetime import datetime
 from typing import Optional
 
 import gspread
-import streamlit as st
 from gspread.utils import rowcol_to_a1
 
 from config import GOOGLE_SHEET_ID, TAB_ORDERS, ORDERS_HEADERS
+from utils import data_cache
 from utils.google_client import with_worksheet
 from utils.models import Order, generate_checklist
+
+_CACHE_KEY = "orders"
+_TTL = 60
 
 
 def _create_orders_ws(ss: gspread.Spreadsheet) -> gspread.Worksheet:
@@ -43,16 +46,14 @@ def _parse_rows(ws: gspread.Worksheet) -> list[dict]:
     return records
 
 
-@st.cache_data(ttl=60, show_spinner=False)
-def _fetch_all_orders_cached(_sheet_id: str, _tab: str) -> list[dict]:
-    """Cached fetch - internal, do not call directly."""
+def _load_orders() -> list[dict]:
     result = _on_orders_ws(_parse_rows)
     return result if result is not None else []
 
 
 def fetch_all_orders() -> list[dict]:
-    """Fetch all orders from the Orders tab (cached 30s)."""
-    return _fetch_all_orders_cached(GOOGLE_SHEET_ID, TAB_ORDERS)
+    """Fetch all orders from the Orders tab (cached 60s, write-through)."""
+    return data_cache.get(_CACHE_KEY, _TTL, _load_orders, spinner="Loading orders…")
 
 
 def fetch_orders_by_engineer(email: str) -> list[dict]:
@@ -81,8 +82,8 @@ def fetch_order_by_id(order_id: str) -> dict | None:
 
 
 def _clear_cache():
-    """Clear the orders cache so next read gets fresh data."""
-    _fetch_all_orders_cached.clear()
+    """Drop the orders cache so the next read refetches."""
+    data_cache.invalidate(_CACHE_KEY)
 
 
 def create_order(client: gspread.Client, order_data: dict) -> str:
@@ -145,7 +146,8 @@ def create_order(client: gspread.Client, order_data: dict) -> str:
     ]
 
     _on_orders_ws(lambda ws: ws.insert_row(row, index=2, value_input_option="USER_ENTERED"))
-    _clear_cache()
+    # write-through: new order goes to the top (insert_row index=2)
+    data_cache.insert_row(_CACHE_KEY, dict(zip(ORDERS_HEADERS, row)), top=True)
     return order_id
 
 
@@ -189,7 +191,14 @@ def update_order(client: gspread.Client, order_id: str, updates: dict):
                 })
         if data:
             ws.batch_update(data, value_input_option="USER_ENTERED")  # 1 round trip
-        _clear_cache()
+            # write-through: patch only the columns we actually wrote (these
+            # keys are real Orders headers, so set them verbatim).
+            written = {k: v for k, v in updates.items() if k in headers}
+            data_cache.patch_rows(
+                _CACHE_KEY,
+                lambda r: r.get("OrderID") == order_id,
+                written,
+            )
 
     _on_orders_ws(_do)
 

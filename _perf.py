@@ -48,19 +48,19 @@ for tab in ("Orders", "PCB Delivery", "AllComponents", "Stock", "Messages", "Use
 
 
 # --- App-level cached fetchers (cold then warm) ---
-_section("App fetchers (cold = clear+fetch, warm = cache hit)")
+_section("App fetchers (cold = invalidate+fetch, warm = cache hit)")
 
-from utils.orders_store import _fetch_all_orders_cached
+from utils import data_cache
+from utils.orders_store import fetch_all_orders
 from utils.sheet_handler import (
     fetch_pcb_delivery, fetch_all_components, fetch_stock_data, fetch_stock_values,
 )
-from utils.message_store import _fetch_messages_cached
-from utils.user_store import _fetch_users_cached
-from config import GOOGLE_SHEET_ID, TAB_ORDERS
+from utils.message_store import fetch_all_messages
+from utils.user_store import fetch_allowed_users
 
 
-def timed(label, fn, clear_fn):
-    clear_fn()  # cold
+def timed(label, fn):
+    data_cache.invalidate()  # cold (drop all tabs)
     t = time.time()
     res = fn()
     dt = time.time() - t
@@ -71,10 +71,26 @@ def timed(label, fn, clear_fn):
     print(f"{label:32} warm {time.time()-t:6.4f}s")
 
 
-timed("Orders",        lambda: _fetch_all_orders_cached(GOOGLE_SHEET_ID, TAB_ORDERS), _fetch_all_orders_cached.clear)
-timed("PCB Delivery",  lambda: fetch_pcb_delivery(),  fetch_pcb_delivery.clear)
-timed("AllComponents", lambda: fetch_all_components(), fetch_all_components.clear)
-timed("Stock (dicts)", lambda: fetch_stock_data(),    fetch_stock_data.clear)
-timed("Stock (values)",lambda: fetch_stock_values(),  fetch_stock_values.clear)
-timed("Messages",      lambda: _fetch_messages_cached(GOOGLE_SHEET_ID), _fetch_messages_cached.clear)
-timed("Users",         lambda: _fetch_users_cached(GOOGLE_SHEET_ID),    _fetch_users_cached.clear)
+timed("Orders",        fetch_all_orders)
+timed("PCB Delivery",  fetch_pcb_delivery)
+timed("AllComponents", fetch_all_components)
+timed("Stock (dicts)", fetch_stock_data)
+timed("Stock (values)",fetch_stock_values)
+timed("Messages",      fetch_all_messages)
+timed("Users",         fetch_allowed_users)
+
+
+# --- Write-through patch: a post-save rerun is a warm cache hit, not a refetch ---
+_section("Write-through (patch keeps cache warm = no refetch)")
+
+from utils.orders_store import _CACHE_KEY as ORDERS_KEY
+
+fetch_all_orders()  # ensure warm
+sample = fetch_all_orders()[0]
+oid = sample.get("OrderID")
+data_cache.patch_rows(ORDERS_KEY, lambda r: r.get("OrderID") == oid, {"Notes": "__sim__"})
+t = time.time()
+after = fetch_all_orders()  # should be instant + reflect the patch
+dt = time.time() - t
+patched = next((o for o in after if o.get("OrderID") == oid), {})
+print(f"read after patch_rows: {dt:6.4f}s   Notes={patched.get('Notes')!r} (expect __sim__)")

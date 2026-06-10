@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import Optional
 
 import gspread
-import streamlit as st
 from gspread.utils import rowcol_to_a1
 
 from config import (
@@ -13,7 +12,17 @@ from config import (
     TAB_PCB_DELIVERY,
     TAB_STOCK,
 )
+from utils import data_cache
 from utils.google_client import with_worksheet
+
+# data_cache keys + TTLs (seconds)
+_K_STOCK_RECORDS = "stock_records"
+_K_STOCK_VALUES = "stock_values"
+_K_COMPONENTS = "components"
+_K_DELIVERY = "delivery"
+_TTL_STOCK = 120
+_TTL_COMPONENTS = 60
+_TTL_DELIVERY = 60
 
 
 def get_spreadsheet(client: gspread.Client) -> gspread.Spreadsheet:
@@ -22,39 +31,54 @@ def get_spreadsheet(client: gspread.Client) -> gspread.Spreadsheet:
     return _cached()
 
 
+def _as_int(v) -> Optional[int]:
+    """Parse a cell value to int, or None (for cache-patch row matching)."""
+    try:
+        return int(str(v).strip())
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
 # --- Cache invalidation helpers ---
 
 def _invalidate_pcb_delivery_cache():
-    fetch_pcb_delivery.clear()
+    data_cache.invalidate(_K_DELIVERY)
 
 
 def _invalidate_components_cache():
-    fetch_all_components.clear()
+    data_cache.invalidate(_K_COMPONENTS)
 
 
 def _invalidate_stock_cache():
-    fetch_stock_data.clear()
-    fetch_stock_values.clear()
+    data_cache.invalidate(_K_STOCK_RECORDS, _K_STOCK_VALUES)
 
 
 # --- Stock operations ---
 
-@st.cache_data(ttl=120, show_spinner=False)
-def fetch_stock_data(_client_id: str = "") -> list[dict]:
-    """Fetch all stock data from the Stock tab. Cached 2 minutes."""
+def _load_stock_records() -> list[dict]:
     result = with_worksheet(TAB_STOCK, lambda ws: ws.get_all_records())
     return result if result is not None else []
 
 
-@st.cache_data(ttl=120, show_spinner=False)
+def fetch_stock_data(_client_id: str = "") -> list[dict]:
+    """Fetch all stock data from the Stock tab. Cached 2 minutes."""
+    return data_cache.get(_K_STOCK_RECORDS, _TTL_STOCK, _load_stock_records,
+                          spinner="Loading stock…")
+
+
+def _load_stock_values() -> list[list]:
+    result = with_worksheet(TAB_STOCK, lambda ws: ws.get_all_values())
+    return result if result is not None else []
+
+
 def fetch_stock_values(_client_id: str = "") -> list[list]:
     """Raw 2D values of the Stock tab (headers + rows). Cached 2 minutes.
 
     Used by the Stock page, which needs raw values (Stock tab has duplicate /
     blank header cells that break get_all_records()).
     """
-    result = with_worksheet(TAB_STOCK, lambda ws: ws.get_all_values())
-    return result if result is not None else []
+    return data_cache.get(_K_STOCK_VALUES, _TTL_STOCK, _load_stock_values,
+                          spinner="Loading stock…")
 
 
 def add_stock_entry(client: gspread.Client, mpn: str, specs: str = "",
@@ -82,9 +106,7 @@ def add_stock_entry(client: gspread.Client, mpn: str, specs: str = "",
 
 # --- AllComponents operations ---
 
-@st.cache_data(ttl=60, show_spinner=False)
-def fetch_all_components(_client=None) -> list[dict]:
-    """Fetch all records from AllComponents tab. Cached 60s."""
+def _load_components() -> list[dict]:
     all_values = with_worksheet(TAB_ALL_COMPONENTS, lambda ws: ws.get_all_values())
     if not all_values or len(all_values) < 3:
         return []
@@ -98,6 +120,12 @@ def fetch_all_components(_client=None) -> list[dict]:
                 record[header] = row[i]
         records.append(record)
     return records
+
+
+def fetch_all_components(_client=None) -> list[dict]:
+    """Fetch all records from AllComponents tab. Cached 60s, write-through."""
+    return data_cache.get(_K_COMPONENTS, _TTL_COMPONENTS, _load_components,
+                          spinner="Loading components…")
 
 
 def get_next_component_id(client: gspread.Client) -> int:
@@ -164,7 +192,12 @@ def update_component_cells(client: gspread.Client, component_id: int,
                         for name, value in updates.items()
                     ]
                     ws.batch_update(data, value_input_option="USER_ENTERED")  # 1 round trip
-                    _invalidate_components_cache()
+                    # write-through (fuzzy: config names vs drifted headers)
+                    data_cache.patch_rows(
+                        _K_COMPONENTS,
+                        lambda r: _as_int(r.get("ID")) == component_id,
+                        updates, fuzzy=True,
+                    )
                     return
             except (ValueError, IndexError):
                 continue
@@ -196,9 +229,7 @@ def add_component_rows(client: gspread.Client, rows: list[list]):
 
 # --- PCB Delivery operations ---
 
-@st.cache_data(ttl=60, show_spinner=False)
-def fetch_pcb_delivery(_client=None) -> list[dict]:
-    """Fetch all records from PCB Delivery tab. Cached 60s."""
+def _load_pcb_delivery() -> list[dict]:
     all_values = with_worksheet(TAB_PCB_DELIVERY, lambda ws: ws.get_all_values())
     if not all_values or len(all_values) < 2:
         return []
@@ -212,6 +243,12 @@ def fetch_pcb_delivery(_client=None) -> list[dict]:
                 record[header] = row[i]
         records.append(record)
     return records
+
+
+def fetch_pcb_delivery(_client=None) -> list[dict]:
+    """Fetch all records from PCB Delivery tab. Cached 60s, write-through."""
+    return data_cache.get(_K_DELIVERY, _TTL_DELIVERY, _load_pcb_delivery,
+                          spinner="Loading deliveries…")
 
 
 def get_next_delivery_number(client: gspread.Client) -> int:
@@ -289,7 +326,12 @@ def update_delivery_cells(client: gspread.Client, delivery_number: int,
                         for name, value in updates.items()
                     ]
                     ws.batch_update(data, value_input_option="USER_ENTERED")
-                    _invalidate_pcb_delivery_cache()
+                    # write-through (fuzzy: config names vs drifted headers)
+                    data_cache.patch_rows(
+                        _K_DELIVERY,
+                        lambda r: _as_int(r.get("Number")) == delivery_number,
+                        updates, fuzzy=True,
+                    )
                     return
             except (ValueError, IndexError):
                 continue

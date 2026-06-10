@@ -4,12 +4,14 @@ from __future__ import annotations
 from typing import Optional
 
 import gspread
-import streamlit as st
 
 from config import GOOGLE_SHEET_ID
+from utils import data_cache
 from utils.google_client import with_worksheet
 
 TAB_USERS = "Users"
+_CACHE_KEY = "users"
+_TTL = 60
 
 # Hardcoded fallback admin - prevents lockout if Sheet is empty/broken
 FALLBACK_ADMIN = {"email": "alan@tg0.com.hk", "name": "Alan", "role": "admin"}
@@ -28,9 +30,8 @@ def _on_users_ws(fn):
     return with_worksheet(TAB_USERS, fn, create=_create_users_ws)
 
 
-@st.cache_data(ttl=60, show_spinner=False)
-def _fetch_users_cached(_sheet_id: str) -> dict:
-    """Cached fetch of users from Sheet. Returns {email: {name, role}}."""
+def _load_users() -> dict:
+    """Load users from the Sheet. Returns {email: {name, role}}."""
     try:
         all_values = _on_users_ws(lambda ws: ws.get_all_values())
         if not all_values or len(all_values) < 2:
@@ -57,11 +58,11 @@ def _fetch_users_cached(_sheet_id: str) -> dict:
 
 def fetch_allowed_users() -> dict:
     """Get the allowed users dict (cached 60s)."""
-    return _fetch_users_cached(GOOGLE_SHEET_ID)
+    return data_cache.get(_CACHE_KEY, _TTL, _load_users)
 
 
 def _clear_cache():
-    _fetch_users_cached.clear()
+    data_cache.invalidate(_CACHE_KEY)
 
 
 def add_user(client: gspread.Client, email: str, name: str, role: str):
