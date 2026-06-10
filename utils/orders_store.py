@@ -157,29 +157,39 @@ def update_order(client: gspread.Client, order_id: str, updates: dict):
         order_id: the OrderID to update
         updates: dict of {column_header: new_value}
     """
+    if not updates:
+        return
+
     def _do(ws: gspread.Worksheet):
-        all_values = ws.get_all_values()       # 1 round trip: headers + find row
-        if len(all_values) < 2:
+        # 1 round trip: column A (to find the row) + row 1 (live headers).
+        # Always a fresh col-A read — create_order inserts at row 2 and shifts
+        # every row, so row indices must never be cached.
+        col_a, header_rows = ws.batch_get(["A:A", "1:1"])
+        if not header_rows:
+            return
+        headers = header_rows[0]
+
+        # col_a includes the header at index 0, so sheet row = i + 1
+        row_idx = None
+        for i, cell in enumerate(col_a):
+            if (cell[0] if cell else "") == order_id:
+                row_idx = i + 1
+                break
+        if row_idx is None:
             return
 
-        headers = all_values[0]
-
-        # Find the row with matching OrderID
-        for row_idx, row in enumerate(all_values[1:], start=2):  # 1-indexed, skip header
-            if row[0] == order_id:
-                # Build all cell writes, then send in ONE batch_update call
-                data = []
-                for col_name, value in updates.items():
-                    if col_name in headers:
-                        col_idx = headers.index(col_name) + 1  # 1-indexed
-                        data.append({
-                            "range": rowcol_to_a1(row_idx, col_idx),
-                            "values": [[value]],
-                        })
-                if data:
-                    ws.batch_update(data, value_input_option="USER_ENTERED")  # 1 round trip
-                _clear_cache()
-                return
+        # Build all cell writes, then send in ONE batch_update call
+        data = []
+        for col_name, value in updates.items():
+            if col_name in headers:
+                col_idx = headers.index(col_name) + 1  # 1-indexed
+                data.append({
+                    "range": rowcol_to_a1(row_idx, col_idx),
+                    "values": [[value]],
+                })
+        if data:
+            ws.batch_update(data, value_input_option="USER_ENTERED")  # 1 round trip
+        _clear_cache()
 
     _on_orders_ws(_do)
 
@@ -216,14 +226,22 @@ def sync_order_to_delivery(client: gspread.Client, order: dict,
 
 
 def ensure_delivery_for_order(client: gspread.Client, order: dict,
-                              vendor_num: str, smt_route: str, eta: str) -> int:
+                              vendor_num: str, smt_route: str, eta: str,
+                              extra_order_updates: dict | None = None) -> int:
     """At 'ordered': create the PCB Delivery row if not already linked and
     store its Number back on the order; if already linked, just sync.
     Returns the delivery Number.
+
+    extra_order_updates: extra Orders fields (e.g. {"Status": "ordered"}) to
+    write together with DeliveryNumber so the status flip and the linkage land
+    in ONE update_order call instead of two.
     """
+    extra = extra_order_updates or {}
     dn = (order.get("DeliveryNumber") or "").strip()
     if dn:
         sync_order_to_delivery(client, order, vendor_num, smt_route, eta)
+        if extra:
+            update_order(client, order.get("OrderID", ""), extra)
         return int(dn)
 
     from utils.sheet_handler import get_next_delivery_number, add_delivery_row
@@ -244,5 +262,6 @@ def ensure_delivery_for_order(client: gspread.Client, order: dict,
         order.get("EngineerName", ""),  # Register
     ]
     add_delivery_row(client, row)
-    update_order(client, order.get("OrderID", ""), {"DeliveryNumber": str(next_num)})
+    update_order(client, order.get("OrderID", ""),
+                 {"DeliveryNumber": str(next_num), **extra})
     return next_num

@@ -115,20 +115,22 @@ if status_idx < len(ORDER_STATUSES) - 1:
         next_status = ORDER_STATUSES[status_idx + 1]
         if st.button(f"Advance to {next_status.upper()} ➡", type="primary", width="stretch"):
             if client:
-                update_order(client, order_id, {"Status": next_status})
-
-                # Create/link PCB Delivery row when transitioning to "ordered"
                 if next_status == "ordered":
+                    # Combine the status flip with the delivery linkage into one
+                    # update_order write.
                     try:
                         num = ensure_delivery_for_order(
                             client, order,
                             order.get("VendorOrderNum", ""),
                             order.get("SMTRoute", ""),
                             order.get("ETA", ""),
+                            extra_order_updates={"Status": "ordered"},
                         )
                         st.toast(f"PCB Delivery #{num} ready!")
                     except Exception as e:
                         st.warning(f"PCB Delivery write failed: {e}")
+                else:
+                    update_order(client, order_id, {"Status": next_status})
 
                 st.rerun()
 
