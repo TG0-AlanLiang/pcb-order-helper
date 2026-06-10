@@ -5,41 +5,29 @@ import streamlit as st
 
 from utils.auth import require_auth, is_admin
 from utils.google_client import get_gspread_client
-from utils.orders_store import fetch_all_orders, fetch_orders_for_user, update_order
+from utils.orders_store import (
+    fetch_all_orders, fetch_orders_for_user, fetch_order_by_id, update_order,
+)
 from utils.drive_handler import upload_file
 from utils.message_store import fetch_messages_for_order, send_message
 from config import ORDER_STATUSES, STATUS_COLORS
 
 
-user = require_auth()
+@st.fragment
+def order_card(order_id: str, user: dict):
+    """Render one order's expander as an isolated fragment.
 
-st.title("📦 My Orders")
-st.markdown(f"Viewing orders for: **{user['name']}** ({user['email']})")
+    Re-reads the order from the (write-through) cache by id, so message Send /
+    file re-upload rerun only this card. Delete changes status -> full rerun.
+    """
+    order = fetch_order_by_id(order_id)
+    if order is None:
+        st.rerun()
+        return
 
-# Admin can see all orders here too
-if is_admin(user):
-    orders = fetch_all_orders()
-    st.info(f"Admin view - showing all {len(orders)} orders")
-else:
-    # Show orders where user is engineer OR reviewer
-    orders = fetch_orders_for_user(user["email"], user["name"])
-    st.caption("Showing orders where you're the engineer or reviewer.")
+    client = get_gspread_client()
+    admin_view = is_admin(user)
 
-if not orders:
-    st.info("No orders found. Go to **Submit Order** to create one.")
-    st.stop()
-
-# Sort: non-delivered first, then by creation date descending
-delivered = [o for o in orders if o.get("Status") == "delivered"]
-active = [o for o in orders if o.get("Status") != "delivered"]
-active.sort(key=lambda o: o.get("CreatedAt", ""), reverse=True)
-delivered.sort(key=lambda o: o.get("CreatedAt", ""), reverse=True)
-orders = active + delivered
-
-client = get_gspread_client()
-
-for order in orders:
-    order_id = order.get("OrderID", "?")
     pcb_name = order.get("PCBName", "Unknown")
     status = order.get("Status", "new")
     priority = order.get("Priority", "Normal")
@@ -56,7 +44,7 @@ for order in orders:
     type_icon = "🔵 FPC" if pcb_type == "FPC" else "⬜ Rigid"
 
     header = f"{priority_icon} **{pcb_name}** | {type_icon} | Qty: {quantity} | :{STATUS_COLORS.get(status, 'gray')}[{status.upper()}]"
-    if is_admin(user):
+    if admin_view:
         header += f" | 👤 {engineer}"
 
     with st.expander(header, expanded=False):
@@ -98,7 +86,7 @@ for order in orders:
 
         # --- Actions: Re-upload + Delete ---
         # Only owner or admin can act
-        can_act = is_admin(user) or (engineer_email.lower() == user["email"].lower())
+        can_act = admin_view or (engineer_email.lower() == user["email"].lower())
 
         if can_act:
             st.markdown("---")
@@ -122,7 +110,7 @@ for order in orders:
                         if client:
                             update_order(client, order_id, {"DriveFileLink": new_link})
                         st.success(f"File updated: {new_file.name}")
-                        st.rerun()
+                        st.rerun(scope="fragment")
                     except Exception as e:
                         st.error(f"Upload failed: {e}")
 
@@ -135,7 +123,7 @@ for order in orders:
                             if client:
                                 update_order(client, order_id, {"Status": "cancelled"})
                             st.success(f"Order {order_id} cancelled.")
-                            st.rerun()
+                            st.rerun()  # status changed -> rebuild list
                         except Exception as e:
                             st.error(f"Failed: {e}")
                 elif status != "delivered" and status != "cancelled":
@@ -162,7 +150,7 @@ for order in orders:
             sent = st.form_submit_button("Send")
         if sent and new_msg.strip() and client:
             send_message(client, order_id, user["name"], new_msg.strip())
-            st.rerun()
+            st.rerun(scope="fragment")
 
         # --- Reorder button ---
         st.markdown("---")
@@ -181,3 +169,32 @@ for order in orders:
             }
             st.info("Order specs copied! Go to **Submit Order** to complete the reorder.")
             st.switch_page("pages/ee_submit_order.py")
+
+
+user = require_auth()
+
+st.title("📦 My Orders")
+st.markdown(f"Viewing orders for: **{user['name']}** ({user['email']})")
+
+# Admin can see all orders here too
+if is_admin(user):
+    orders = fetch_all_orders()
+    st.info(f"Admin view - showing all {len(orders)} orders")
+else:
+    # Show orders where user is engineer OR reviewer
+    orders = fetch_orders_for_user(user["email"], user["name"])
+    st.caption("Showing orders where you're the engineer or reviewer.")
+
+if not orders:
+    st.info("No orders found. Go to **Submit Order** to create one.")
+    st.stop()
+
+# Sort: non-delivered first, then by creation date descending
+delivered = [o for o in orders if o.get("Status") == "delivered"]
+active = [o for o in orders if o.get("Status") != "delivered"]
+active.sort(key=lambda o: o.get("CreatedAt", ""), reverse=True)
+delivered.sort(key=lambda o: o.get("CreatedAt", ""), reverse=True)
+orders = active + delivered
+
+for order in orders:
+    order_card(order.get("OrderID", "?"), user)

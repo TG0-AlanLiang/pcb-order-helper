@@ -48,14 +48,6 @@ def fetch_messages_for_order(order_id: str) -> list[dict]:
     return [m for m in fetch_all_messages() if m.get("OrderID") == order_id]
 
 
-def fetch_messages_grouped() -> dict[str, list[dict]]:
-    """Group all messages by OrderID in one pass (avoids the per-card N+1)."""
-    grouped: dict[str, list[dict]] = {}
-    for m in fetch_all_messages():
-        grouped.setdefault(m.get("OrderID", ""), []).append(m)
-    return grouped
-
-
 def fetch_unread_messages(user_name: str) -> list[dict]:
     """Get messages NOT authored by this user (i.e. messages from others on their orders)."""
     return [m for m in fetch_all_messages() if m.get("Author", "") != user_name]

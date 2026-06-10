@@ -324,24 +324,31 @@ else:
 
 st.markdown("---")
 
-# --- Messages ---
-st.subheader("💬 Messages")
-messages = fetch_messages_for_order(order_id)
-if messages:
-    for m in messages:
-        author = m.get("Author", "")
-        ts = m.get("Timestamp", "")
-        content = m.get("Content", "")
-        is_me = author == user["name"]
-        prefix = "🟢" if is_me else "🔵"
-        st.markdown(f"{prefix} **{author}** ({ts}): {content}")
-else:
-    st.caption("No messages yet.")
+# --- Messages (isolated fragment: sending reruns only this block) ---
+@st.fragment
+def messages_section(order_id: str, user_name: str):
+    st.subheader("💬 Messages")
+    messages = fetch_messages_for_order(order_id)
+    if messages:
+        for m in messages:
+            author = m.get("Author", "")
+            ts = m.get("Timestamp", "")
+            content = m.get("Content", "")
+            is_me = author == user_name
+            prefix = "🟢" if is_me else "🔵"
+            st.markdown(f"{prefix} **{author}** ({ts}): {content}")
+    else:
+        st.caption("No messages yet.")
 
-with st.form("proc_msgform", clear_on_submit=True):
-    new_msg = st.text_input("Message", key="proc_msg_input", placeholder="Ask engineer or leave a note...",
-                            label_visibility="collapsed")
-    sent = st.form_submit_button("Send")
-if sent and new_msg.strip() and client:
-    send_message(client, order_id, user["name"], new_msg.strip())
-    st.rerun()
+    with st.form("proc_msgform", clear_on_submit=True):
+        new_msg = st.text_input("Message", key="proc_msg_input", placeholder="Ask engineer or leave a note...",
+                                label_visibility="collapsed")
+        sent = st.form_submit_button("Send")
+    if sent and new_msg.strip():
+        msg_client = get_gspread_client()
+        if msg_client:
+            send_message(msg_client, order_id, user_name, new_msg.strip())
+            st.rerun(scope="fragment")
+
+
+messages_section(order_id, user["name"])

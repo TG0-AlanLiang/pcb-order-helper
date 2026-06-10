@@ -4,6 +4,8 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+import streamlit as st
+
 # PCB / Electronics manufacturing terminology dictionary (kept for reference display)
 EN_TO_CN = {
     "rigid": "硬板", "flexible": "柔性板", "flex": "柔性", "fpc": "FPC柔性板",
@@ -80,6 +82,12 @@ def google_translate(text: str, target_lang: str, source_lang: str = "") -> str:
         return f"[deep-translator not installed] {text}"
     except Exception as e:
         return f"[Translation error: {e}] {text}"
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def cached_translate(text: str, target_lang: str, source_lang: str = "") -> str:
+    """google_translate() memoized for 1h so repeating a translation is instant."""
+    return google_translate(text, target_lang, source_lang)
 
 
 def detect_language(text: str) -> str:

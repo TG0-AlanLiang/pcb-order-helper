@@ -7,72 +7,45 @@ import streamlit as st
 from utils.auth import require_role
 from utils.google_client import get_gspread_client
 from utils.orders_store import (
-    fetch_all_orders, update_order,
+    fetch_all_orders, fetch_order_by_id, update_order,
     sync_order_to_delivery, ensure_delivery_for_order,
 )
 from utils.message_store import fetch_messages_for_order, send_message
 from config import ORDER_STATUSES, STATUS_COLORS, CNY_TO_GBP
 
 
-user = require_role("admin")
+STATUS_ACTIONS = {
+    "new": ("🔧 Start Processing", "processing"),
+    "processing": ("📦 Mark as Ordered", "ordered"),
+    "ordered": ("🚚 Mark as Shipped", "shipped"),
+    "shipped": ("✅ Mark as Delivered", "delivered"),
+}
 
-st.title("📊 All Orders")
-st.caption("Delivered orders are moved to **Order History** — see sidebar.")
 
-all_orders = fetch_all_orders()
-# Exclude delivered orders (they're in Order History page)
-orders = [o for o in all_orders if o.get("Status") != "delivered"]
-if not orders:
-    st.info("No active orders. Check Order History for delivered orders.")
-    st.stop()
+def _to_f(v):
+    try:
+        return float(str(v).strip()) if str(v).strip() else 0.0
+    except (ValueError, TypeError):
+        return 0.0
 
-# --- Summary metrics ---
-col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
-for col, status in zip([col_m1, col_m2, col_m3, col_m4, col_m5], ORDER_STATUSES):
-    count = sum(1 for o in orders if o.get("Status") == status)
-    col.metric(status.upper(), count)
 
-st.markdown("---")
+@st.fragment
+def order_card(order_id: str, user_name: str):
+    """Render one order's expander as an isolated fragment.
 
-# --- Filters ---
-col_f1, col_f2, col_f3 = st.columns(3)
-with col_f1:
-    status_filter = st.selectbox("Status", ["all"] + ORDER_STATUSES, index=0)
-with col_f2:
-    priority_filter = st.selectbox("Priority", ["all", "URGENT", "Normal"])
-with col_f3:
-    engineers = sorted(set(o.get("EngineerName", "") for o in orders if o.get("EngineerName")))
-    engineer_filter = st.selectbox("Engineer", ["all"] + engineers)
+    The order is re-read from the (write-through) cache by id on every fragment
+    rerun, so an in-card Save or message Send reruns ONLY this card instead of
+    rebuilding all 40 expanders. Status changes still do a full st.rerun() so
+    the summary metrics and filter buckets stay consistent.
+    """
+    order = fetch_order_by_id(order_id)
+    if order is None or order.get("Status") == "delivered":
+        # Card no longer belongs on this page -> full rerun to rebuild the list.
+        st.rerun()
+        return
 
-# Filter
-filtered = orders
-if status_filter != "all":
-    filtered = [o for o in filtered if o.get("Status") == status_filter]
-if priority_filter != "all":
-    filtered = [o for o in filtered if o.get("Priority") == priority_filter]
-if engineer_filter != "all":
-    filtered = [o for o in filtered if o.get("EngineerName") == engineer_filter]
+    client = get_gspread_client()
 
-# Sort: URGENT first, then newest first within same priority
-filtered.sort(key=lambda o: (
-    0 if o.get("Priority") == "URGENT" else 1,
-    "9999" if not o.get("CreatedAt") else o.get("CreatedAt"),
-), reverse=False)
-# Within each priority group, reverse by date (newest first)
-urgent = [o for o in filtered if o.get("Priority") == "URGENT"]
-normal = [o for o in filtered if o.get("Priority") != "URGENT"]
-urgent.sort(key=lambda o: o.get("CreatedAt", ""), reverse=True)
-normal.sort(key=lambda o: o.get("CreatedAt", ""), reverse=True)
-filtered = urgent + normal
-
-st.markdown(f"**{len(filtered)} orders** shown")
-st.markdown("---")
-
-# --- Order cards ---
-client = get_gspread_client()
-
-for order in filtered:
-    order_id = order.get("OrderID", "?")
     pcb_name = order.get("PCBName", "Unknown")
     status = order.get("Status", "new")
     priority = order.get("Priority", "Normal")
@@ -124,9 +97,6 @@ for order in filtered:
             st.markdown(f"📁 [View files on Drive]({drive_link})")
 
         # Cost display
-        def _to_f(v):
-            try: return float(str(v).strip()) if str(v).strip() else 0.0
-            except (ValueError, TypeError): return 0.0
         bare_c = _to_f(order.get("BareBoardCostCNY", ""))
         bom_c = _to_f(order.get("BOMCostCNY", ""))
         smt_c = _to_f(order.get("SMTCostCNY", ""))
@@ -189,7 +159,8 @@ for order in filtered:
                     except Exception as e:
                         st.warning(f"Delivery sync failed: {e}")
                 st.success("Saved!")
-            st.rerun()
+            # Save doesn't change status/priority/engineer -> card stays put.
+            st.rerun(scope="fragment")
 
         # --- Messages ---
         st.markdown("**💬 Messages:**")
@@ -199,7 +170,7 @@ for order in filtered:
                 author = m.get("Author", "")
                 ts = m.get("Timestamp", "")
                 content = m.get("Content", "")
-                prefix = "🟢" if author == user["name"] else "🔵"
+                prefix = "🟢" if author == user_name else "🔵"
                 st.markdown(f"{prefix} **{author}** ({ts}): {content}")
         else:
             st.caption("No messages.")
@@ -210,19 +181,12 @@ for order in filtered:
                                     label_visibility="collapsed")
             sent = st.form_submit_button("Send")
         if sent and new_msg.strip() and client:
-            send_message(client, order_id, user["name"], new_msg.strip())
-            st.rerun()
+            send_message(client, order_id, user_name, new_msg.strip())
+            st.rerun(scope="fragment")
 
         # --- Status action buttons (single-click, outside forms) ---
         st.markdown("**Actions:**")
         btn_col2, btn_col3 = st.columns(2)
-
-        STATUS_ACTIONS = {
-            "new": ("🔧 Start Processing", "processing"),
-            "processing": ("📦 Mark as Ordered", "ordered"),
-            "ordered": ("🚚 Mark as Shipped", "shipped"),
-            "shipped": ("✅ Mark as Delivered", "delivered"),
-        }
 
         if status in STATUS_ACTIONS:
             label, next_status = STATUS_ACTIONS[status]
@@ -246,6 +210,7 @@ for order in filtered:
                         else:
                             update_order(client, order_id, {"Status": next_status})
 
+                        # Status changed -> full rerun (card moves bucket, metrics update)
                         st.rerun()
 
         if status != "new":
@@ -256,3 +221,57 @@ for order in filtered:
                     if client:
                         update_order(client, order_id, {"Status": prev_status})
                         st.rerun()
+
+
+user = require_role("admin")
+
+st.title("📊 All Orders")
+st.caption("Delivered orders are moved to **Order History** — see sidebar.")
+
+all_orders = fetch_all_orders()
+# Exclude delivered orders (they're in Order History page)
+orders = [o for o in all_orders if o.get("Status") != "delivered"]
+if not orders:
+    st.info("No active orders. Check Order History for delivered orders.")
+    st.stop()
+
+# --- Summary metrics ---
+col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
+for col, status in zip([col_m1, col_m2, col_m3, col_m4, col_m5], ORDER_STATUSES):
+    count = sum(1 for o in orders if o.get("Status") == status)
+    col.metric(status.upper(), count)
+
+st.markdown("---")
+
+# --- Filters ---
+col_f1, col_f2, col_f3 = st.columns(3)
+with col_f1:
+    status_filter = st.selectbox("Status", ["all"] + ORDER_STATUSES, index=0)
+with col_f2:
+    priority_filter = st.selectbox("Priority", ["all", "URGENT", "Normal"])
+with col_f3:
+    engineers = sorted(set(o.get("EngineerName", "") for o in orders if o.get("EngineerName")))
+    engineer_filter = st.selectbox("Engineer", ["all"] + engineers)
+
+# Filter
+filtered = orders
+if status_filter != "all":
+    filtered = [o for o in filtered if o.get("Status") == status_filter]
+if priority_filter != "all":
+    filtered = [o for o in filtered if o.get("Priority") == priority_filter]
+if engineer_filter != "all":
+    filtered = [o for o in filtered if o.get("EngineerName") == engineer_filter]
+
+# Sort: URGENT first, then newest first within same priority
+urgent = [o for o in filtered if o.get("Priority") == "URGENT"]
+normal = [o for o in filtered if o.get("Priority") != "URGENT"]
+urgent.sort(key=lambda o: o.get("CreatedAt", ""), reverse=True)
+normal.sort(key=lambda o: o.get("CreatedAt", ""), reverse=True)
+filtered = urgent + normal
+
+st.markdown(f"**{len(filtered)} orders** shown")
+st.markdown("---")
+
+# --- Order cards (each an isolated fragment) ---
+for order in filtered:
+    order_card(order.get("OrderID", "?"), user["name"])

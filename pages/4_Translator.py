@@ -4,7 +4,7 @@ import streamlit as st
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from utils.translator import google_translate, detect_language, get_terminology_dict
+from utils.translator import cached_translate, detect_language, get_terminology_dict
 
 st.title("🌐 PCB Translator")
 
@@ -46,7 +46,7 @@ with tab1:
                 source = "zh"
 
             with st.spinner("Translating..."):
-                result = google_translate(input_text, target, source)
+                result = cached_translate(input_text, target, source)
 
             st.subheader("Translation Result")
             st.text_area("Output (copy this):", value=result, height=200, key="general_output")
@@ -68,7 +68,7 @@ with tab2:
     if st.button("🔄 Translate to Chinese", key="notes_translate_btn", type="primary"):
         if notes_input.strip():
             with st.spinner("Translating..."):
-                result = google_translate(notes_input, "zh", "en")
+                result = cached_translate(notes_input, "zh", "en")
 
             st.subheader("Chinese Output (paste to JLC remarks)")
             st.text_area("Chinese notes:", value=result, height=200, key="cn_output")
@@ -89,7 +89,7 @@ with tab2:
     if st.button("🔄 Translate to English", key="eq_translate_btn", type="primary"):
         if eq_input.strip():
             with st.spinner("Translating..."):
-                result = google_translate(eq_input, "en", "zh")
+                result = cached_translate(eq_input, "en", "zh")
 
             st.subheader("English Output (share on Slack)")
             st.text_area("English translation:", value=result, height=150, key="en_output")
