@@ -6,8 +6,10 @@ import streamlit as st
 
 from utils.auth import require_role
 from utils.google_client import get_gspread_client
-from utils.orders_store import fetch_all_orders, update_order
-from utils.sheet_handler import get_next_delivery_number, add_delivery_row
+from utils.orders_store import (
+    fetch_all_orders, update_order,
+    sync_order_to_delivery, ensure_delivery_for_order,
+)
 from utils.message_store import fetch_messages_for_order, send_message
 from config import ORDER_STATUSES, STATUS_COLORS, CNY_TO_GBP
 
@@ -180,6 +182,12 @@ for order in filtered:
                 payload["ChecklistJSON"] = json.dumps(checklist, ensure_ascii=False)
             if payload:
                 update_order(client, order_id, payload)
+                # Keep the linked PCB Delivery row in sync (ETA / vendor / SMT)
+                if any(k in payload for k in ("ETA", "VendorOrderNum", "SMTRoute")):
+                    try:
+                        sync_order_to_delivery(client, order, new_vendor, new_smt, new_eta)
+                    except Exception as e:
+                        st.warning(f"Delivery sync failed: {e}")
                 st.success("Saved!")
             st.rerun()
 
@@ -223,24 +231,16 @@ for order in filtered:
                     if client:
                         update_order(client, order_id, {"Status": next_status})
 
-                        # Auto-write PCB Delivery when marking as ordered (uses SAVED values)
+                        # Create/link PCB Delivery row when marking as ordered
                         if next_status == "ordered":
                             try:
-                                next_num = get_next_delivery_number(client)
-                                order_date = created.split(" ")[0] if created else datetime.now().strftime("%Y-%m-%d")
-                                vendor_num = order.get("VendorOrderNum", "")
-                                smt_route = order.get("SMTRoute", "")
-                                if needs_smt and smt_route:
-                                    vendor_display = f"{vendor_num}; {smt_route}" if vendor_num else smt_route
-                                else:
-                                    vendor_display = vendor_num
-                                delivery_row = [
-                                    next_num, order_date, priority, pcb_name, vendor_display,
-                                    "", order.get("Recipient", ""), "", "", order.get("ETA", ""),
-                                    engineer,  # Register (engineer name)
-                                ]
-                                add_delivery_row(client, delivery_row)
-                                st.toast(f"PCB Delivery #{next_num} auto-created!")
+                                num = ensure_delivery_for_order(
+                                    client, order,
+                                    order.get("VendorOrderNum", ""),
+                                    order.get("SMTRoute", ""),
+                                    order.get("ETA", ""),
+                                )
+                                st.toast(f"PCB Delivery #{num} ready!")
                             except Exception as e:
                                 st.warning(f"PCB Delivery write failed: {e}")
 

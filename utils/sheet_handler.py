@@ -287,3 +287,47 @@ def update_delivery_cell(client: gspread.Client, delivery_number: int,
             continue
 
     raise ValueError(f"Delivery number {delivery_number} not found")
+
+
+def update_delivery_cells(client: gspread.Client, delivery_number: int,
+                          updates: dict):
+    """Update multiple cells of one PCB Delivery row in a single batch write.
+
+    Args:
+        client: authenticated gspread client
+        delivery_number: the Number value in column A
+        updates: dict of {column_name: value}, keys from PCB_DELIVERY_COLS
+
+    Does 2 round trips total (1 fetch + 1 batch_update).
+    """
+    if not updates:
+        return
+    from config import PCB_DELIVERY_COLS
+
+    # Resolve column letters -> 1-indexed numbers
+    col_map = {}
+    for name in updates:
+        letter = PCB_DELIVERY_COLS.get(name)
+        if not letter:
+            raise ValueError(f"Unknown delivery column: {name}")
+        col_map[name] = ord(letter.upper()) - ord("A") + 1
+
+    sheet = get_spreadsheet(client)
+    ws = sheet.worksheet(TAB_PCB_DELIVERY)
+    all_values = ws.get_all_values()
+
+    for row_idx, row in enumerate(all_values[1:], start=2):  # skip header
+        try:
+            if int(row[0]) == delivery_number:
+                data = [
+                    {"range": rowcol_to_a1(row_idx, col_map[name]),
+                     "values": [[value]]}
+                    for name, value in updates.items()
+                ]
+                ws.batch_update(data, value_input_option="USER_ENTERED")
+                _invalidate_pcb_delivery_cache()
+                return
+        except (ValueError, IndexError):
+            continue
+
+    raise ValueError(f"Delivery number {delivery_number} not found")

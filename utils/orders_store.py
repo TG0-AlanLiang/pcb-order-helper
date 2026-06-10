@@ -143,6 +143,7 @@ def create_order(client: gspread.Client, order_data: dict) -> str:
         "",                                             # BOMCostCNY
         "",                                             # SMTCostCNY
         order_data.get("reviewer", ""),                  # Reviewer
+        "",                                             # DeliveryNumber
     ]
 
     ws = _get_orders_worksheet(client)
@@ -188,3 +189,61 @@ def update_checklist(client: gspread.Client, order_id: str, checklist: list[dict
     """Update the checklist JSON for an order."""
     checklist_json = json.dumps(checklist, ensure_ascii=False)
     update_order(client, order_id, {"ChecklistJSON": checklist_json})
+
+
+# --- Orders <-> PCB Delivery linkage ---
+
+def _vendor_display(order: dict, vendor_num: str, smt_route: str) -> str:
+    """Compose the PCB Delivery 'vendor Order number' value (order# + SMT route)."""
+    needs_smt = order.get("NeedsSMT", "No") == "Yes"
+    if needs_smt and smt_route:
+        return f"{vendor_num}; {smt_route}" if vendor_num else smt_route
+    return vendor_num
+
+
+def sync_order_to_delivery(client: gspread.Client, order: dict,
+                           vendor_num: str, smt_route: str, eta: str):
+    """If this order is linked to a PCB Delivery row, push the latest
+    vendor/SMT and ETA to that row. No-op if not yet linked (not ordered).
+    """
+    dn = (order.get("DeliveryNumber") or "").strip()
+    if not dn:
+        return
+    from utils.sheet_handler import update_delivery_cells
+    update_delivery_cells(client, int(dn), {
+        "vendor Order number": _vendor_display(order, vendor_num, smt_route),
+        "ETA (UK)": eta,
+    })
+
+
+def ensure_delivery_for_order(client: gspread.Client, order: dict,
+                              vendor_num: str, smt_route: str, eta: str) -> int:
+    """At 'ordered': create the PCB Delivery row if not already linked and
+    store its Number back on the order; if already linked, just sync.
+    Returns the delivery Number.
+    """
+    dn = (order.get("DeliveryNumber") or "").strip()
+    if dn:
+        sync_order_to_delivery(client, order, vendor_num, smt_route, eta)
+        return int(dn)
+
+    from utils.sheet_handler import get_next_delivery_number, add_delivery_row
+    next_num = get_next_delivery_number(client)
+    created = order.get("CreatedAt", "")
+    order_date = created.split(" ")[0] if created else datetime.now().strftime("%Y-%m-%d")
+    row = [
+        next_num,
+        order_date,
+        order.get("Priority", "Normal"),
+        order.get("PCBName", ""),
+        _vendor_display(order, vendor_num, smt_route),
+        "",  # Photo
+        order.get("Recipient", ""),
+        "",  # Jimmy received
+        "",  # Jimmy ship remark
+        eta,
+        order.get("EngineerName", ""),  # Register
+    ]
+    add_delivery_row(client, row)
+    update_order(client, order.get("OrderID", ""), {"DeliveryNumber": str(next_num)})
+    return next_num

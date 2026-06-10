@@ -89,7 +89,7 @@ ORDERS_HEADERS = [
     "Quantity", "Priority", "Recipient", "NeedsSMT", "SMTRoute",
     "VendorOrderNum", "ETA", "Notes", "DriveFileLink", "ChecklistJSON",
     "TestByEngineer", "BareBoardCostCNY", "BOMCostCNY", "SMTCostCNY",
-    "Reviewer",
+    "Reviewer", "DeliveryNumber",
 ]
 
 # Currency conversion (manual rate, update as needed)
