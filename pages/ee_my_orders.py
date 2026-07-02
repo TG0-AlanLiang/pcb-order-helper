@@ -164,8 +164,12 @@ def order_card(order_id: str, user: dict):
                 "quantity": quantity,
                 "priority": priority,
                 "recipient": recipient,
+                "reviewer": order.get("Reviewer", ""),
+                "test_by_engineer": order.get("TestByEngineer", "No"),
                 "needs_smt": order.get("NeedsSMT", "No") == "Yes",
                 "notes": order.get("Notes", ""),
+                "drive_file_link": drive_link,
+                "source_order_id": order_id,
             }
             st.info("Order specs copied! Go to **Submit Order** to complete the reorder.")
             st.switch_page("pages/ee_submit_order.py")
