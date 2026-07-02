@@ -9,13 +9,41 @@ from utils.drive_handler import upload_file
 
 user = require_auth()
 
+
+def _option_index(options, value, default=0):
+    """Return the option index for saved reorder values, falling back safely."""
+    try:
+        return options.index(value)
+    except ValueError:
+        return default
+
+
+def _int_value(value, default):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _vendor_from_reorder(reorder: dict) -> str:
+    notes = reorder.get("notes", "")
+    if "[Vendor: JDB]" in notes:
+        return "JDB"
+    return "JLCPCB"
+
+
 st.title("📋 Submit New PCB Order")
 st.markdown(f"Submitting as: **{user['name']}** ({user['email']})")
 
-# Check for reorder data
-reorder = st.session_state.pop("reorder_data", {})
+# Keep reorder data across Streamlit reruns. Do not pop it here: changing any
+# widget (including Quantity) reruns the page, and a one-shot pop resets the
+# rest of the form back to blank/default values.
+reorder = st.session_state.get("reorder_data", {})
 if reorder:
     st.success(f"Reordering: **{reorder.get('pcb_name', '')}** — review and update specs below.")
+    if st.button("Start blank order instead", key="clear_reorder_draft"):
+        st.session_state.pop("reorder_data", None)
+        st.rerun()
 
 # ============================================================
 # PCB Name + Type (these control downstream options)
@@ -31,7 +59,9 @@ with col_b:
     pcb_type = st.selectbox("PCB Type *", type_options, index=type_idx,
                             help="Select first — options below change based on type")
 with col_c:
-    pcb_vendor = st.selectbox("PCB Vendor", ["JLCPCB", "JDB"],
+    vendor_options = ["JLCPCB", "JDB"]
+    pcb_vendor = st.selectbox("PCB Vendor", vendor_options,
+                              index=_option_index(vendor_options, _vendor_from_reorder(reorder)),
                               help="JDB and JLCPCB share the same PCB options")
 
 # Board dimensions
@@ -53,12 +83,17 @@ st.subheader("2. PCB Specifications")
 if pcb_type == "Rigid":
     col1, col2 = st.columns(2)
     with col1:
-        layers = st.selectbox("Layers", [1, 2, 4, 6, 8, 10, 12], index=1)
+        layer_options = [1, 2, 4, 6, 8, 10, 12]
+        layers = st.selectbox("Layers", layer_options,
+                              index=_option_index(layer_options, _int_value(reorder.get("layers"), 2), 1))
+        thickness_options = ["0.4mm", "0.6mm", "0.8mm", "1.0mm", "1.2mm", "1.6mm", "2.0mm", "2.5mm", "3.0mm"]
         thickness = st.selectbox("Thickness",
-            ["0.4mm", "0.6mm", "0.8mm", "1.0mm", "1.2mm", "1.6mm", "2.0mm", "2.5mm", "3.0mm"],
-            index=5)
+            thickness_options,
+            index=_option_index(thickness_options, reorder.get("thickness", "1.6mm"), 5))
+        solder_options = ["Green", "Red", "Yellow", "Blue", "White", "Black", "Matte Black", "JLC Purple"]
         solder_mask = st.selectbox("Solder Mask Color",
-            ["Green", "Red", "Yellow", "Blue", "White", "Black", "Matte Black", "JLC Purple"])
+            solder_options,
+            index=_option_index(solder_options, reorder.get("solder_mask", "Green")))
         surface_finish = st.selectbox("Surface Finish",
             ["ENIG (Immersion Gold)", "HASL (Lead)", "Lead-free HASL"],
             index=0)
@@ -82,7 +117,9 @@ if pcb_type == "Rigid":
 else:  # FPC
     col1, col2 = st.columns(2)
     with col1:
-        layers = st.selectbox("Layers", [1, 2, 4], index=1)
+        layer_options = [1, 2, 4]
+        layers = st.selectbox("Layers", layer_options,
+                              index=_option_index(layer_options, _int_value(reorder.get("layers"), 2), 1))
         copper_type = st.selectbox("Copper Type",
             ["RA (Rolled Annealed)", "ED (Electrodeposited)"],
             index=0,
@@ -91,7 +128,9 @@ else:  # FPC
         # Thickness depends on vendor + copper type
         if pcb_vendor == "JDB":
             # JDB: 0.10/0.13/0.20, all support RA
-            thickness = st.selectbox("Thickness", ["0.10mm", "0.13mm", "0.20mm"], index=0,
+            thickness_options = ["0.10mm", "0.13mm", "0.20mm"]
+            thickness = st.selectbox("Thickness", thickness_options,
+                                     index=_option_index(thickness_options, reorder.get("thickness", "0.10mm")),
                                      help="JDB thickness options")
         else:
             # JLC: RA only on 0.11mm
@@ -99,11 +138,14 @@ else:  # FPC
                 thickness = st.selectbox("Thickness", ["0.11mm"], index=0,
                                          help="JLC: RA copper only available in 0.11mm")
             else:
-                thickness = st.selectbox("Thickness", ["0.11mm", "0.12mm", "0.20mm"], index=0)
+                thickness_options = ["0.11mm", "0.12mm", "0.20mm"]
+                thickness = st.selectbox("Thickness", thickness_options,
+                                         index=_option_index(thickness_options, reorder.get("thickness", "0.11mm")))
 
+        coverlay_options = ["Yellow", "Black", "White"]
         coverlay_color = st.selectbox("Coverlay Color",
-            ["Yellow", "Black", "White"],
-            index=0)
+            coverlay_options,
+            index=_option_index(coverlay_options, reorder.get("solder_mask", "Yellow")))
     with col2:
         # FPC can only use ENIG
         surface_finish = "ENIG (Immersion Gold)"
@@ -275,6 +317,7 @@ if st.button("Submit Order", type="primary", key="submit_order_btn"):
                 "reviewer": reviewer,
             }
             order_id = create_order(client, order_data)
+            st.session_state.pop("reorder_data", None)
             st.success(f"Order submitted! Order ID: **{order_id}**")
             st.balloons()
             st.info("Go to **My Orders** to track progress.")
