@@ -56,8 +56,32 @@ def _invalidate_stock_cache():
 # --- Stock operations ---
 
 def _load_stock_records() -> list[dict]:
-    result = with_worksheet(TAB_STOCK, lambda ws: ws.get_all_records())
-    return result if result is not None else []
+    all_values = with_worksheet(TAB_STOCK, lambda ws: ws.get_all_values())
+    if not all_values or len(all_values) < 2:
+        return []
+
+    # Stock has formula/helper columns and trailing blank columns. gspread's
+    # get_all_records() rejects duplicate blank headers, so parse values
+    # manually and ignore blank/duplicate headers.
+    headers = all_values[0]
+    header_indexes: list[tuple[int, str]] = []
+    seen_headers: set[str] = set()
+    for i, header in enumerate(headers):
+        header = header.strip()
+        if not header or header in seen_headers:
+            continue
+        header_indexes.append((i, header))
+        seen_headers.add(header)
+
+    records = []
+    for row in all_values[1:]:
+        if not any(str(cell).strip() for cell in row):
+            continue
+        record = {}
+        for i, header in header_indexes:
+            record[header] = row[i] if i < len(row) else ""
+        records.append(record)
+    return records
 
 
 def fetch_stock_data(_client_id: str = "") -> list[dict]:
