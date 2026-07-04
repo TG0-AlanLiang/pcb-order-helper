@@ -30,7 +30,7 @@ if not client:
 # --- Select order ---
 st.header("1. Select Order")
 all_orders = fetch_all_orders()
-active_orders = [o for o in all_orders if o.get("Status") not in ["delivered", ""]]
+active_orders = [o for o in all_orders if o.get("Status") not in ["delivered", "cancelled", ""]]
 
 if not active_orders:
     st.info("No active orders. Create one in **New Order** or **Submit Order** first.")

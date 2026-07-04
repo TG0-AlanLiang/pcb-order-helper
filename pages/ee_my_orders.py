@@ -193,12 +193,12 @@ if not orders:
     st.info("No orders found. Go to **Submit Order** to create one.")
     st.stop()
 
-# Sort: non-delivered first, then by creation date descending
-delivered = [o for o in orders if o.get("Status") == "delivered"]
-active = [o for o in orders if o.get("Status") != "delivered"]
+# Sort: active first, then delivered/cancelled history by creation date descending
+history = [o for o in orders if o.get("Status") in ("delivered", "cancelled")]
+active = [o for o in orders if o.get("Status") not in ("delivered", "cancelled")]
 active.sort(key=lambda o: o.get("CreatedAt", ""), reverse=True)
-delivered.sort(key=lambda o: o.get("CreatedAt", ""), reverse=True)
-orders = active + delivered
+history.sort(key=lambda o: o.get("CreatedAt", ""), reverse=True)
+orders = active + history
 
 for order in orders:
     order_card(order.get("OrderID", "?"), user)

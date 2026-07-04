@@ -39,7 +39,7 @@ def order_card(order_id: str, user_name: str):
     the summary metrics and filter buckets stay consistent.
     """
     order = fetch_order_by_id(order_id)
-    if order is None or order.get("Status") == "delivered":
+    if order is None or order.get("Status") in ("delivered", "cancelled"):
         # Card no longer belongs on this page -> full rerun to rebuild the list.
         st.rerun()
         return
@@ -226,13 +226,13 @@ def order_card(order_id: str, user_name: str):
 user = require_role("admin")
 
 st.title("📊 All Orders")
-st.caption("Delivered orders are moved to **Order History** — see sidebar.")
+st.caption("Delivered/cancelled orders are moved to **Order History** — see sidebar.")
 
 all_orders = fetch_all_orders()
-# Exclude delivered orders (they're in Order History page)
-orders = [o for o in all_orders if o.get("Status") != "delivered"]
+# Exclude delivered/cancelled orders (they're in Order History page)
+orders = [o for o in all_orders if o.get("Status") not in ("delivered", "cancelled")]
 if not orders:
-    st.info("No active orders. Check Order History for delivered orders.")
+    st.info("No active orders. Check Order History for delivered/cancelled orders.")
     st.stop()
 
 # --- Summary metrics ---

@@ -24,11 +24,11 @@ if not orders:
     st.info("No orders to process.")
     st.stop()
 
-# Filter to non-delivered orders by default
-active_orders = [o for o in orders if o.get("Status") != "delivered"]
+# Filter to actionable orders only; delivered/cancelled are history.
+active_orders = [o for o in orders if o.get("Status") not in ("delivered", "cancelled")]
 
 if not active_orders:
-    st.success("All orders have been delivered!")
+    st.success("No active orders to process.")
     st.stop()
 
 # --- Visual overview list ---
@@ -75,7 +75,7 @@ if not sel_id:
 # Find the selected order
 order = next((o for o in active_orders if o.get("OrderID") == sel_id), None)
 if not order:
-    st.warning("Selected order not found. It may have been delivered.")
+    st.warning("Selected order not found. It may have been delivered or cancelled.")
     if st.button("Clear selection"):
         del st.session_state["process_order_id"]
         st.rerun()
