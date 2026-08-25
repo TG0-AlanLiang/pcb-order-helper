@@ -40,11 +40,19 @@ def _field_from_notes(notes: str, label: str) -> str:
 
 
 def _size_from_notes(notes: str) -> tuple[float, float]:
-    match = re.search(r"Size:\s*([0-9.]+)\s*x\s*([0-9.]+)\s*cm", notes)
+    match = re.search(
+        r"Size:\s*([0-9.]+)\s*x\s*([0-9.]+)\s*(mm|cm)",
+        notes,
+        flags=re.IGNORECASE,
+    )
     if not match:
         return 0.0, 0.0
     try:
-        return float(match.group(1)), float(match.group(2))
+        length = float(match.group(1))
+        width = float(match.group(2))
+        if match.group(3).lower() == "cm":
+            return length * 10, width * 10
+        return length, width
     except ValueError:
         return 0.0, 0.0
 
@@ -109,13 +117,13 @@ with col_c:
 # Board dimensions
 dim1, dim2 = st.columns(2)
 with dim1:
-    board_length = st.number_input("Board Length (cm) *", min_value=0.0, max_value=100.0,
-                                   value=default_board_length, step=0.01, format="%.2f",
-                                   help="Longest side of the board in cm")
+    board_length = st.number_input("Board Length (mm) *", min_value=0.0, max_value=1000.0,
+                                   value=default_board_length, step=0.1, format="%.2f",
+                                   help="Longest side of the board in mm")
 with dim2:
-    board_width = st.number_input("Board Width (cm) *", min_value=0.0, max_value=100.0,
-                                  value=default_board_width, step=0.01, format="%.2f",
-                                  help="Shorter side of the board in cm")
+    board_width = st.number_input("Board Width (mm) *", min_value=0.0, max_value=1000.0,
+                                  value=default_board_width, step=0.1, format="%.2f",
+                                  help="Shorter side of the board in mm")
 
 # ============================================================
 # Specifications (dynamic based on PCB type)
@@ -293,13 +301,13 @@ with col6:
 
 # Prepend dimensions to extra_specs
 if board_length > 0 and board_width > 0:
-    dimensions_str = f"Size: {board_length:.2f} x {board_width:.2f} cm"
+    dimensions_str = f"Size: {board_length:.2f} x {board_width:.2f} mm"
     extra_specs = f"{dimensions_str} | {extra_specs}"
 
 # Show spec summary
 with st.expander("Spec Summary (auto-generated)"):
     st.markdown(f"**Type:** {pcb_type} | **Layers:** {layers} | **Thickness:** {thickness}")
-    st.markdown(f"**Size:** {board_length:.2f} x {board_width:.2f} cm")
+    st.markdown(f"**Size:** {board_length:.2f} x {board_width:.2f} mm")
     st.markdown(f"**Solder Mask:** {solder_mask} | **Qty:** {quantity} | **Priority:** {priority}")
     st.markdown(f"**Details:** {extra_specs}")
 
