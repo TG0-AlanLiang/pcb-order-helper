@@ -179,10 +179,14 @@ else:  # FPC
         copper_type = st.selectbox("Copper Type",
             copper_options,
             index=_option_index(copper_options, copied_copper),
-            help="RA (压延铜) is default — more flexible. JLC: RA limited to 0.11mm. JDB: RA available on all thicknesses.")
+            help="RA (压延铜) is default — more flexible. For 1/2-layer boards, JLC RA is limited to 0.11mm. Four-layer boards use 0.20–0.45mm options.")
 
-        # Thickness depends on vendor + copper type
-        if pcb_vendor == "JDB":
+        # Four-layer FPC uses its own thickness range for either copper type.
+        if layers == 4:
+            thickness_options = ["0.20mm", "0.25mm", "0.30mm", "0.35mm", "0.40mm", "0.45mm"]
+            thickness = st.selectbox("Thickness", thickness_options,
+                                     index=_option_index(thickness_options, reorder.get("thickness", "0.20mm")))
+        elif pcb_vendor == "JDB":
             # JDB: 0.10/0.13/0.20, all support RA
             thickness_options = ["0.10mm", "0.13mm", "0.20mm"]
             thickness = st.selectbox("Thickness", thickness_options,
