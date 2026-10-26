@@ -13,9 +13,28 @@ from config import GOOGLE_SHEET_ID, TAB_ORDERS, ORDERS_HEADERS
 from utils import data_cache
 from utils.google_client import with_worksheet
 from utils.models import Order, generate_checklist
+from utils.sheet_records import cell_text, read_records
 
-_CACHE_KEY = "orders"
+_CACHE_KEY = "orders_raw_ids_v1"
 _TTL = 60
+
+
+class OrderIdentityError(ValueError):
+    """An order cannot be identified safely for reading or writing."""
+
+
+def _validate_order_ids(records: list[dict]) -> None:
+    seen = set()
+    for record in records:
+        order_id = record.get("OrderID", "")
+        if not order_id.strip():
+            raise OrderIdentityError("An order has no OrderID. Please repair the Orders sheet.")
+        if order_id in seen:
+            raise OrderIdentityError(
+                f"Duplicate OrderID '{order_id}' in the Orders sheet. "
+                "Order actions are blocked until the duplicate is resolved."
+            )
+        seen.add(order_id)
 
 
 def _create_orders_ws(ss: gspread.Spreadsheet) -> gspread.Worksheet:
@@ -32,18 +51,7 @@ def _on_orders_ws(fn):
 
 def _parse_rows(ws: gspread.Worksheet) -> list[dict]:
     """Parse all rows into list of dicts."""
-    all_values = ws.get_all_values()
-    if len(all_values) < 2:
-        return []
-    headers = all_values[0]
-    records = []
-    for row in all_values[1:]:
-        record = {}
-        for i, header in enumerate(headers):
-            if i < len(row) and header:
-                record[header] = row[i]
-        records.append(record)
-    return records
+    return read_records(ws)
 
 
 def _load_orders() -> list[dict]:
@@ -53,7 +61,9 @@ def _load_orders() -> list[dict]:
 
 def fetch_all_orders() -> list[dict]:
     """Fetch all orders from the Orders tab (cached 60s, write-through)."""
-    return data_cache.get(_CACHE_KEY, _TTL, _load_orders, spinner="Loading orders…")
+    records = data_cache.get(_CACHE_KEY, _TTL, _load_orders, spinner="Loading orders…")
+    _validate_order_ids(records)
+    return records
 
 
 def fetch_orders_by_engineer(email: str) -> list[dict]:
@@ -96,7 +106,7 @@ def create_order(client: gspread.Client, order_data: dict) -> str:
     Returns:
         The generated OrderID
     """
-    order_id = str(uuid.uuid4())[:8]
+    order_id = f"ord_{uuid.uuid4().hex}"
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     # Build Order object for checklist generation
@@ -145,7 +155,7 @@ def create_order(client: gspread.Client, order_data: dict) -> str:
         "",                                             # DeliveryNumber
     ]
 
-    _on_orders_ws(lambda ws: ws.insert_row(row, index=2, value_input_option="USER_ENTERED"))
+    _on_orders_ws(lambda ws: ws.insert_row(row, index=2, value_input_option="RAW"))
     # write-through: new order goes to the top (insert_row index=2)
     data_cache.insert_row(_CACHE_KEY, dict(zip(ORDERS_HEADERS, row)), top=True)
     return order_id
@@ -161,24 +171,34 @@ def update_order(client: gspread.Client, order_id: str, updates: dict):
     """
     if not updates:
         return
+    if not order_id or not order_id.strip():
+        raise OrderIdentityError("Cannot update an order without an OrderID.")
+    if "OrderID" in updates:
+        raise OrderIdentityError("OrderID cannot be changed through an order update.")
 
     def _do(ws: gspread.Worksheet):
         # 1 round trip: column A (to find the row) + row 1 (live headers).
         # Always a fresh col-A read — create_order inserts at row 2 and shifts
         # every row, so row indices must never be cached.
-        col_a, header_rows = ws.batch_get(["A:A", "1:1"])
+        col_a, header_rows = ws.batch_get(
+            ["A:A", "1:1"], value_render_option="UNFORMATTED_VALUE",
+            date_time_render_option="FORMATTED_STRING",
+        )
         if not header_rows:
-            return
+            raise OrderIdentityError("The Orders sheet has no header row.")
         headers = header_rows[0]
+        if not headers or headers[0] != "OrderID":
+            raise OrderIdentityError("The first column of the Orders sheet must be OrderID.")
 
         # col_a includes the header at index 0, so sheet row = i + 1
-        row_idx = None
-        for i, cell in enumerate(col_a):
-            if (cell[0] if cell else "") == order_id:
-                row_idx = i + 1
-                break
-        if row_idx is None:
-            return
+        matches = [i + 1 for i, cell in enumerate(col_a)
+                   if i > 0 and cell and cell_text(cell[0]) == order_id]
+        if len(matches) != 1:
+            raise OrderIdentityError(
+                f"OrderID '{order_id}' matches {len(matches)} rows. "
+                "No changes were saved. Refresh the page or repair the Orders sheet."
+            )
+        row_idx = matches[0]
 
         # Build all cell writes, then send in ONE batch_update call
         data = []

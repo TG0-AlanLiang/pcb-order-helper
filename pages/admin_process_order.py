@@ -9,6 +9,7 @@ from utils.google_client import get_gspread_client
 from utils.orders_store import (
     fetch_all_orders, update_order, update_checklist,
     sync_order_to_delivery, ensure_delivery_for_order,
+    OrderIdentityError,
 )
 from utils.drive_handler import download_file_bytes, download_to_local
 from utils.message_store import fetch_messages_for_order, send_message
@@ -19,7 +20,11 @@ user = require_role("admin")
 
 st.title("🔧 Process Order")
 
-orders = fetch_all_orders()
+try:
+    orders = fetch_all_orders()
+except OrderIdentityError as exc:
+    st.error(str(exc))
+    st.stop()
 if not orders:
     st.info("No orders to process.")
     st.stop()

@@ -10,9 +10,10 @@ import gspread
 from config import GOOGLE_SHEET_ID
 from utils import data_cache
 from utils.google_client import with_worksheet
+from utils.sheet_records import read_records
 
 TAB_MESSAGES = "Messages"
-_CACHE_KEY = "messages"
+_CACHE_KEY = "messages_raw_ids_v1"
 _TTL = 30
 _HEADERS = ["MessageID", "OrderID", "Timestamp", "Author", "Content"]
 
@@ -28,15 +29,7 @@ def _on_messages_ws(fn):
 
 
 def _load_messages() -> list[dict]:
-    all_values = _on_messages_ws(lambda ws: ws.get_all_values())
-    if not all_values or len(all_values) < 2:
-        return []
-    headers = all_values[0]
-    return [
-        {headers[i]: row[i] for i in range(min(len(headers), len(row)))}
-        for row in all_values[1:]
-        if any(cell.strip() for cell in row)
-    ]
+    return _on_messages_ws(read_records) or []
 
 
 def fetch_all_messages() -> list[dict]:
@@ -54,11 +47,15 @@ def fetch_unread_messages(user_name: str) -> list[dict]:
 
 
 def send_message(client: gspread.Client, order_id: str, author: str, content: str):
-    msg_id = str(uuid.uuid4())[:8]
+    from utils.orders_store import fetch_order_by_id, OrderIdentityError
+
+    if fetch_order_by_id(order_id) is None:
+        raise OrderIdentityError("Order not found. Refresh the page before sending a message.")
+    msg_id = f"msg_{uuid.uuid4().hex}"
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     # append_row appends after the last data row in one API round trip
     _on_messages_ws(lambda ws: ws.append_row(
-        [msg_id, order_id, now, author, content], value_input_option="USER_ENTERED"))
+        [msg_id, order_id, now, author, content], value_input_option="RAW"))
     # write-through: append to the end (messages are chronological)
     data_cache.insert_row(_CACHE_KEY,
                           dict(zip(_HEADERS, [msg_id, order_id, now, author, content])),
